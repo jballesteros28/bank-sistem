@@ -1,0 +1,27 @@
+# FastAPI core
+fastapi
+uvicorn[standard]
+
+# PostgreSQL + ORM
+sqlalchemy
+asyncpg
+
+# MongoDB
+motor
+
+# Seguridad
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Validación
+pydantic
+
+# Variables de entorno
+python-dotenv
+
+# Alembic (para migraciones SQLAlchemy)
+alembic
+
+# Testing (opcional)
+pytest
+httpx
