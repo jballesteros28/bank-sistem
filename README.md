@@ -1,75 +1,95 @@
-# bank-sistem. en produccion
-# 🏦 Sistema Bancario Moderno — Full Stack App
+# 💸 Sistema Bancario Backend — FastAPI + PostgreSQL + MongoDB
 
-Este proyecto es un sistema bancario profesional, moderno y escalable, diseñado con arquitectura modular. Permite gestionar usuarios, cuentas bancarias, transacciones y notificaciones con un enfoque seguro, eficiente y extensible.
+Este es un backend completo y escalable para una aplicación de sistema bancario moderno. Desarrollado con FastAPI, PostgreSQL y MongoDB, incluye autenticación segura, gestión de usuarios y cuentas, transacciones bancarias, administración avanzada y trazabilidad completa del sistema.
+
+---
 
 ## 🚀 Tecnologías utilizadas
 
-### 🔧 Backend
-- **FastAPI** — API REST rápida y moderna
-- **SQLAlchemy 2.0** — ORM para modelado relacional
-- **PostgreSQL** — Base de datos principal para operaciones bancarias
-- **MongoDB** — Almacenamiento flexible para logs y notificaciones
-- **Alembic** — Control de versiones para la base de datos
-- **JWT** — Autenticación segura con tokens
-- **Pydantic** — Validación de datos
+- **⚙️ Backend:** FastAPI
+- **🗃️ Base de datos relacional:** PostgreSQL con SQLAlchemy 2.0
+- **📦 Base de datos NoSQL:** MongoDB (Motor) para logs y notificaciones
+- **🔐 Seguridad:** JWT, Hashing, Roles, Middlewares personalizados
+- **📁 Arquitectura:** Modular, desacoplada, profesional
+- **📦 Validación:** Pydantic v2 con enums, restricciones y mensajes amigables
 
-### 🖥️ Frontend (en desarrollo)
-- **React clásico** — Interfaz de usuario intuitiva y escalable
-- **Axios** — Comunicación con la API
-- **CSS clásico** — Estilado personalizado sin frameworks de UI
+---
 
-## 🧩 Módulos del sistema
+## 📁 Estructura principal del proyecto
 
-- **Autenticación**: Registro, login, JWT, verificación de identidad
-- **Usuarios**: Gestión de perfil, roles, activación/desactivación
-- **Cuentas bancarias**: Apertura, saldo, cierre y tipos de cuenta
-- **Transacciones**: Transferencias, historial, programaciones
-- **Notificaciones**: Alertas por email o WebSocket (MongoDB)
-- **Administración**: Monitoreo, control de usuarios y logs
+sistema_bancario/
+│
+├── app/ # Lógica de negocio y rutas (auth, usuarios, admin, etc.)
+├── core/ # Configuración general, seguridad, dependencias
+├── models/ # Modelos ORM (SQLAlchemy)
+├── schemas/ # Esquemas de entrada/salida (Pydantic)
+├── services/ # Lógica desacoplada del negocio
+├── database/ # Conexiones y migraciones (PostgreSQL + MongoDB)
+├── tests/ # Pruebas unitarias (futuro)
+├── main.py # Punto de entrada FastAPI
+├── requirements.txt # Dependencias
+└── .env # Variables de entorno (no incluido en Git)
 
-## ⚙️ Estructura de carpetas
+yaml
+Copiar código
 
-📦 sistema_bancario/
-├── app/ # Rutas y controladores por módulo
-├── core/ # Configuración y seguridad
-├── models/ # Modelos de base de datos
-├── schemas/ # Esquemas de validación (Pydantic)
-├── services/ # Lógica de negocio
-├── database/ # Conexiones PostgreSQL y MongoDB
-├── tests/ # Pruebas unitarias
-├── main.py # Punto de entrada de la API
-└── .env # Variables de entorno
+---
 
-bash
-Copiar
-Editar
+## 🔐 Funcionalidades principales
 
-## 📦 Instalación rápida
+### ✅ Autenticación
+- Registro y login con JWT
+- Validaciones estrictas de email y contraseña
+- Roles (`cliente`, `admin`, `soporte`)
 
-```bash
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate  # en Linux/macOS
-venv\Scripts\activate     # en Windows
+### 👥 Usuarios y cuentas
+- Crear/ver cuentas bancarias
+- Consultar saldo y estado
+- Cambiar contraseña y editar perfil
+- Congelar/reactivar cuentas (admin)
 
-# Instalar dependencias
-pip install -r requirements.txt
+### 💸 Transacciones
+- Transferencias seguras entre cuentas
+- Ver historial (como emisor o receptor)
+- Validaciones de saldo, estado y pertenencia
 
-# Ejecutar el servidor
-uvicorn main:app --reload
-🔐 Endpoints clave
-POST /auth/register → Crear nuevo usuario
+### 🛠️ Administración (solo para admins)
+- Listar y gestionar usuarios
+- Cambiar roles
+- Congelar cuentas
+- Consultar logs persistentes (MongoDB)
+- Reportes: transacciones por fecha, estado de cuentas
 
-POST /auth/login → Obtener token JWT
+---
 
-GET /auth/me → Ver usuario autenticado (requiere token)
+## 🔔 Notificaciones (fase activa)
 
-📅 Próximas funcionalidades
-Autenticación 2FA
+En esta etapa se implementa el módulo de notificaciones para auditar y alertar al usuario:
 
-Transacciones recurrentes
+- 📩 Simulación/envío de emails
+- 📦 Registro de eventos importantes en MongoDB (login fallido, errores, transferencias)
+- 🔔 (Opcional) WebSocket para notificaciones en tiempo real
 
-Reportes financieros avanzados
+---
 
-Frontend React + dashboard
+## 🧪 Próximos pasos
+
+- Implementar sistema de notificaciones email/alerta
+- Agregar WebSocket para push en tiempo real
+- Crear frontend con React clásico
+- Tests unitarios (`pytest`)
+- Dockerización + despliegue
+
+---
+
+## 🧠 Autor
+
+**Juan David Ballesteros**  
+Desarrollador Full Stack | Backend con Python, FastAPI y bases de datos relacionales y no relacionales.  
+🔗 [LinkedIn](https://www.linkedin.com/in/juan-david-ballesteros-413350260)
+
+---
+
+## 📜 Licencia
+
+MIT © 2025 - Juan David Ballesteros

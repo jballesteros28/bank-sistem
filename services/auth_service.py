@@ -3,7 +3,9 @@ from fastapi import HTTPException, status
 from models.usuario import Usuario
 from core.seguridad import hash_password, verify_password, crear_token
 from schemas.auth import RegistroUsuario, LoginUsuario, TokenRespuesta
-from core.config import settings
+from typing import Any
+from services.log_service import guardar_log
+from models.log import LogMongo
 
 # Función para registrar un nuevo usuario
 def registrar_usuario(datos: RegistroUsuario, db: Session) -> Usuario:
@@ -33,11 +35,18 @@ def registrar_usuario(datos: RegistroUsuario, db: Session) -> Usuario:
     return nuevo_usuario
 
 # Función para loguear un usuario existente
-def login_usuario(datos: LoginUsuario, db: Session) -> TokenRespuesta:
+async def login_usuario(datos: LoginUsuario, db: Session) -> TokenRespuesta:
     # Buscar al usuario por email
     usuario = db.query(Usuario).filter(Usuario.email == datos.email).first()
 
     if not usuario:
+        log = LogMongo(
+        evento="LoginFallido",
+        mensaje=f"Intento de login con email inexistente: {datos.email}",
+        nivel="WARNING",
+        endpoint="/auth/login"
+        )
+        await guardar_log(log)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Credenciales inválidas"
@@ -45,13 +54,21 @@ def login_usuario(datos: LoginUsuario, db: Session) -> TokenRespuesta:
 
     # Verificar si la contraseña coincide con la hasheada
     if not verify_password(datos.password, usuario.hashed_password):
+        log = LogMongo(
+        evento="LoginFallido",
+        mensaje=f"Contraseña incorrecta para email: {datos.email}",
+        nivel="WARNING",
+        endpoint="/auth/login",
+        usuario_id=usuario.id
+        )
+        await guardar_log(log)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Credenciales inválidas"
         )
 
     # Crear el token JWT con la info del usuario
-    token_data = {
+    token_data: dict[str, Any] = {
         "id": usuario.id,
         "email": usuario.email,
         "nombre": usuario.nombre,

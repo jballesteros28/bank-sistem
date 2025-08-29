@@ -1,12 +1,14 @@
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from schemas.auth import DatosUsuarioToken
 from sqlalchemy.orm import Session
-from database.db_postgres import SessionLocal
 from core.config import settings
+from services.log_service import guardar_log
+from models.log import LogMongo
+from core.dependencias import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -28,16 +30,9 @@ def crear_token(data: dict, expires_delta: timedelta = None):
 # Definir el esquema Bearer para extraer el token automáticamente
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Dependencia para obtener la sesión de la base de datos
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # Función para obtener el usuario actual desde el token JWT
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> DatosUsuarioToken:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db), request: Request = None) -> DatosUsuarioToken:
     try:
         # Decodificar el token
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -54,4 +49,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         return DatosUsuarioToken(id=id, email=email, nombre=nombre, rol=rol)
 
     except JWTError:
+        log = LogMongo(
+        evento="TokenInvalido",
+        mensaje="Se intentó acceder con un token inválido o expirado.",
+        nivel="WARNING",
+        endpoint=str(request.url),
+        ip=request.client.host
+        )
+        await guardar_log(log)
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
