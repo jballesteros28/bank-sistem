@@ -86,7 +86,7 @@ En esta etapa se implementa el módulo de notificaciones para auditar y alertar 
 
 **Juan David Ballesteros**  
 Desarrollador Full Stack | Backend con Python, FastAPI y bases de datos relacionales y no relacionales.  
-🔗 [LinkedIn](https://www.linkedin.com/in/juan-david-ballesteros-413350260)
+🔗 [LinkedIn](https://www.linkedin.com/in/juan-david-ballesteros-bayona-413350260)
 
 ---
 
