@@ -1,60 +1,173 @@
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, Request
-from fastapi.security import OAuth2PasswordBearer
-from schemas.auth import DatosUsuarioToken
+# core/seguridad.py
+# -*- coding: utf-8 -*-
+
+from jose import jwt, JWTError, ExpiredSignatureError
+from datetime import datetime, timedelta, timezone
+from fastapi import HTTPException, Depends, Request, status
 from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordBearer
+from passlib.context import CryptContext
+from typing import Any
+
 from core.config import settings
+from core.dependencias import get_db
+from models.usuario import Usuario
+from schemas.auth import DatosUsuarioToken
 from services.log_service import guardar_log
 from models.log import LogMongo
-from core.dependencias import get_db
+
+# ==========================================================
+# 🔐 Configuración general
+# ==========================================================
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-def crear_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-
-
-# Definir el esquema Bearer para extraer el token automáticamente
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# Función para obtener el usuario actual desde el token JWT
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db), request: Request = None) -> DatosUsuarioToken:
-    try:
-        # Decodificar el token
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+# ==========================================================
+# 🔒 Helpers de hash
+# ==========================================================
 
-        # Validar datos esenciales
-        id = payload.get("id")
+def hash_password(password: str) -> str:
+    """Hashea una contraseña en texto plano usando bcrypt."""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verifica que una contraseña plana coincida con su hash."""
+    return pwd_context.verify(plain, hashed)
+
+
+# ==========================================================
+# 🧩 Creación de token JWT
+# ==========================================================
+
+def crear_token(data: dict[Any, Any], expires_delta: timedelta | None = None) -> str:
+    """
+    Crea un JWT válido con expiración segura en UTC.
+    """
+    to_encode = data.copy()
+
+    exp_val = to_encode.get("exp")
+    if exp_val is None:
+        expire = datetime.now(timezone.utc) + (
+            expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        to_encode["exp"] = expire
+    elif isinstance(exp_val, datetime) and exp_val.tzinfo is None:
+        to_encode["exp"] = exp_val.replace(tzinfo=timezone.utc)
+
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+# ==========================================================
+# 👤 Obtener usuario autenticado desde el token
+# ==========================================================
+
+async def get_current_user(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> DatosUsuarioToken:
+    """
+    Decodifica el token JWT, valida expiración y existencia del usuario activo.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": True},
+        )
+
+        user_id = payload.get("id")
         email = payload.get("email")
         nombre = payload.get("nombre")
         rol = payload.get("rol")
 
-        if not all([id, email, nombre, rol]):
-            raise HTTPException(status_code=401, detail="Token inválido")
+        if not all([user_id, email, nombre, rol]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido",
+            )
 
-        return DatosUsuarioToken(id=id, email=email, nombre=nombre, rol=rol)
+        usuario: Usuario | None = (
+            db.query(Usuario)
+            .filter(Usuario.id == user_id, Usuario.es_activo == True)
+            .first()
+        )
 
-    except JWTError:
+        if not usuario:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Usuario no encontrado o inactivo",
+            )
+
+        # ✅ Retornar datos del usuario autenticado
+        return DatosUsuarioToken(
+            id=usuario.id,
+            email=usuario.email,
+            nombre=usuario.nombre,
+            rol=usuario.rol.value if hasattr(usuario.rol, "value") else usuario.rol,
+        )
+
+    # 🚫 Token expirado
+    except ExpiredSignatureError:
         log = LogMongo(
-        evento="TokenInvalido",
-        mensaje="Se intentó acceder con un token inválido o expirado.",
-        nivel="WARNING",
-        endpoint=str(request.url),
-        ip=request.client.host
+            evento="TokenInvalido",
+            mensaje="Intento de acceso con token expirado.",
+            nivel="WARNING",
+            endpoint=str(request.url),
+            ip=request.client.host,
         )
         await guardar_log(log)
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado",
+        )
+
+    # 🚫 Token inválido o manipulado
+    except JWTError:
+        log = LogMongo(
+            evento="TokenInvalido",
+            mensaje="Intento de acceso con token inválido o manipulado.",
+            nivel="WARNING",
+            endpoint=str(request.url),
+            ip=request.client.host,
+        )
+        await guardar_log(log)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+        )
+
+
+# ==========================================================
+# 👮‍♂️ Obtener usuario administrador (autorización)
+# ==========================================================
+
+async def get_current_admin(
+    request: Request,
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+) -> DatosUsuarioToken:
+    """
+    Permite solo acceso a usuarios con rol 'admin'.
+    Si no cumple, registra un log en Mongo y lanza 403.
+    """
+    if current_user.rol != "admin":
+        log = LogMongo(
+            evento="AccesoNoAutorizado",
+            mensaje=f"Usuario {current_user.email} intentó acceder a una ruta administrativa.",
+            nivel="WARNING",
+            usuario_id=current_user.id,
+            endpoint=str(request.url),
+            ip=request.client.host,
+        )
+        await guardar_log(log)
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso restringido a administradores",
+        )
+
+    return current_user

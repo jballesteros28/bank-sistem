@@ -18,14 +18,14 @@ class CuentaCongeladaError(Exception):
 
 
 async def manejar_cuenta_congelada(request: Request, exc: CuentaCongeladaError):
-    log = LogMongo(
-        evento="OperacionBloqueada",
-        mensaje=exc.mensaje,
-        nivel="WARNING",
-        endpoint=str(request.url),
-        ip=request.client.host
-    )
-    await guardar_log(log)
+    # log = LogMongo(
+    #     evento="OperacionBloqueada",
+    #     mensaje=exc.mensaje,
+    #     nivel="WARNING",
+    #     endpoint=str(request.url),
+    #     ip=request.client.host
+    # )
+    # await guardar_log(log)
 
     return respuesta_error_estandar(
         detalle=exc.mensaje,
@@ -88,14 +88,14 @@ async def manejar_http_exception(request: Request, exc: HTTPException):
 # ❌ Error inesperado del sistema (500)
 async def manejar_error_general(request: Request, exc: Exception) -> JSONResponse:
     # Guardar log persistente en MongoDB
-    log = LogMongo(
-        evento="ErrorInterno",
-        mensaje=str(exc),
-        nivel="ERROR",
-        endpoint=str(request.url),
-        ip=request.client.host
-    )
-    await guardar_log(log)
+    # log = LogMongo(
+    #     evento="ErrorInterno",
+    #     mensaje=str(exc),
+    #     nivel="ERROR",
+    #     endpoint=str(request.url),
+    #     ip=request.client.host
+    # )
+    # await guardar_log(log)
 
     return JSONResponse(
         status_code=500,

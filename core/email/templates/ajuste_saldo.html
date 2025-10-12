@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ajuste de saldo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f7f9fc; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); overflow: hidden; }
+        .header { background-color: #003366; color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; color: #333; }
+        .highlight { font-weight: bold; color: #003366; }
+        .footer { background-color: #f0f0f0; text-align: center; padding: 15px; font-size: 13px; color: #777; }
+        .footer a { color: #003366; font-weight: bold; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Banco Sophia Intelligence</h1>
+    </div>
+    <div class="content">
+        <h2>🔔 Ajuste de saldo realizado</h2>
+        <p>Hola <span class="highlight">{{ nombre }}</span>,</p>
+        <p>Se ha realizado un ajuste en tu cuenta <strong>{{ numero_cuenta }}</strong>.</p>
+        <ul>
+            <li><strong>Saldo anterior:</strong> ${{ saldo_anterior }}</li>
+            <li><strong>Nuevo saldo:</strong> ${{ saldo_nuevo }}</li>
+        </ul>
+        <p>Si no reconocés esta acción, por favor comunicate con nosotros inmediatamente.</p>
+    </div>
+    <div class="footer">
+        Este mensaje fue enviado automáticamente.<br>
+        Si tenés dudas, <a href="https://sophiabank.com/contacto">contactanos</a>.
+    </div>
+</div>
+</body>
+</html>

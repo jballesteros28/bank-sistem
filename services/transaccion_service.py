@@ -1,125 +1,291 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from fastapi import HTTPException, status, Request, BackgroundTasks
+from datetime import datetime
+from typing import List, Optional
+from decimal import Decimal, ROUND_HALF_UP
+
 from models.transaccion import Transaccion
 from models.cuenta import Cuenta
+from models.usuario import Usuario
 from schemas.transaccion import TransaccionCreate, TransaccionOut
-from fastapi import HTTPException, status, Request
 from core.enums import EstadoCuenta
-from core.excepciones import SaldoInsuficienteError, CuentaCongeladaError, respuesta_error_estandar
+from core.excepciones import SaldoInsuficienteError, respuesta_error_estandar
 from services.log_service import guardar_log
 from models.log import LogMongo
-from datetime import datetime
-from typing import List
+
+# 📧 Enviadores especializados
+from services.enviadores_email.transferencia_exitosa import enviar_email_transferencia_exitosa
+from services.enviadores_email.transferencia_recibida import enviar_email_transferencia_recibida
 
 
-
-# 🔒 Manejo de errores de saldo insuficiente
+# ==========================================================
+# ⚠️ Handler de excepción personalizada
+# ==========================================================
 async def manejar_saldo_insuficiente(request: Request, exc: SaldoInsuficienteError):
-    # Registrar el evento como warning en MongoDB
+    """
+    Se ejecuta automáticamente cuando se lanza un SaldoInsuficienteError.
+    Guarda log en Mongo y devuelve respuesta estándar.
+    """
+    correlation_id = getattr(request.state, "correlation_id", None)
     log = LogMongo(
         evento="SaldoInsuficiente",
         mensaje=exc.mensaje,
         nivel="WARNING",
         endpoint=str(request.url),
-        ip=request.client.host
+        ip=request.client.host,
+        correlation_id=correlation_id
     )
     await guardar_log(log)
 
-    # Devolver respuesta estructurada al cliente
     return respuesta_error_estandar(
         detalle=exc.mensaje,
-        status_code=400,
-        error_type="SaldoInsuficiente"
+        status_code=status.HTTP_400_BAD_REQUEST,
+        error_type="SaldoInsuficiente",
     )
 
 
-# 💳 Ejecutar una transferencia entre cuentas
+# ==========================================================
+# 💳 Ejecutar transferencia entre cuentas
+# ==========================================================
 def realizar_transferencia(
     usuario_id: int,
     cuenta_origen_id: int,
     datos_transaccion: TransaccionCreate,
-    db: Session
+    db: Session,
+    background_tasks: Optional[BackgroundTasks],
+    request: Optional[Request] = None
 ) -> TransaccionOut:
-    # 🔍 Buscar la cuenta origen y validar que pertenezca al usuario
-    cuenta_origen = db.query(Cuenta).filter(
-        Cuenta.id == cuenta_origen_id,
-        Cuenta.usuario_id == usuario_id
-    ).first()
+    """
+    Ejecuta una transferencia entre cuentas con seguridad:
+    - Bloquea cuentas origen y destino (FOR UPDATE).
+    - Valida estados, saldos y montos.
+    - Registra la transacción y actualiza balances.
+    - Dispara logs y notificaciones.
+    """
+    correlation_id = getattr(request.state, "correlation_id", None) if request else None
+
+    # 🔍 1. Obtener y bloquear cuenta origen
+    cuenta_origen: Optional[Cuenta] = (
+        db.query(Cuenta)
+        .filter(Cuenta.id == cuenta_origen_id, Cuenta.usuario_id == usuario_id)
+        .with_for_update()
+        .first()
+    )
 
     if not cuenta_origen:
-        raise CuentaCongeladaError("Cuenta origen no encontrada o no pertenece al usuario.")
+        if background_tasks:
+            log = LogMongo(
+                evento="TransferenciaFallida",
+                mensaje=f"Cuenta origen {cuenta_origen_id} no encontrada para usuario {usuario_id}",
+                nivel="WARNING",
+                usuario_id=usuario_id,
+                metadata={"cuenta_origen": cuenta_origen_id},
+                correlation_id=correlation_id
+            )
+            background_tasks.add_task(guardar_log, log)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cuenta origen no encontrada o no pertenece al usuario.",
+        )
 
-    # 🔍 Buscar la cuenta destino
-    cuenta_destino = db.query(Cuenta).filter(
-        Cuenta.id == datos_transaccion.cuenta_destino_id
-    ).first()
+    # 🔍 2. Obtener y bloquear cuenta destino
+    cuenta_destino: Optional[Cuenta] = (
+        db.query(Cuenta)
+        .filter(Cuenta.id == datos_transaccion.cuenta_destino_id)
+        .with_for_update()
+        .first()
+    )
 
     if not cuenta_destino:
-        raise CuentaCongeladaError("Cuenta destino no encontrada.")
+        if background_tasks:
+            log = LogMongo(
+                evento="TransferenciaFallida",
+                mensaje=f"Cuenta destino {datos_transaccion.cuenta_destino_id} no encontrada",
+                nivel="WARNING",
+                usuario_id=usuario_id,
+                metadata={"cuenta_destino": datos_transaccion.cuenta_destino_id},
+                correlation_id=correlation_id
+            )
+            background_tasks.add_task(guardar_log, log)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cuenta destino no encontrada.",
+        )
 
-    # ❄️ Verificar que ambas cuentas estén activas
+    if cuenta_origen.id == cuenta_destino.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede transferir dinero a la misma cuenta."
+        )
+
+    # ❄️ 3. Validar estados
     if cuenta_origen.estado != EstadoCuenta.activa:
-        raise CuentaCongeladaError("La cuenta origen está congelada o inactiva.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La cuenta origen está congelada o inactiva.",
+        )
     if cuenta_destino.estado != EstadoCuenta.activa:
-        raise CuentaCongeladaError("La cuenta destino está congelada o inactiva.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La cuenta destino está congelada o inactiva.",
+        )
 
-    # 💰 Verificar que el saldo sea suficiente
-    if cuenta_origen.saldo < datos_transaccion.monto:
+    # 💰 4. Normalizar montos
+    monto_transferencia: Decimal = Decimal(datos_transaccion.monto).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    saldo_origen: Decimal = Decimal(cuenta_origen.saldo).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    # ⛔ Validar monto positivo
+    if monto_transferencia <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El monto debe ser mayor a cero.",
+        )
+
+    # 💸 5. Validar saldo suficiente
+    if saldo_origen < monto_transferencia:
+        if background_tasks:
+            log = LogMongo(
+                evento="TransferenciaSaldoInsuficiente",
+                mensaje=f"Saldo insuficiente en cuenta {cuenta_origen.id}, usuario {usuario_id}",
+                nivel="WARNING",
+                usuario_id=usuario_id,
+                metadata={
+                    "cuenta_origen": cuenta_origen.id,
+                    "saldo_actual": str(saldo_origen),
+                    "monto_intentado": str(monto_transferencia),
+                },
+                correlation_id=correlation_id
+            )
+            background_tasks.add_task(guardar_log, log)
         raise SaldoInsuficienteError("El saldo de la cuenta origen no es suficiente.")
 
-    # 🧾 Registrar la transacción en base de datos
+    # 🧾 6. Registrar transacción
     nueva_transaccion = Transaccion(
         cuenta_origen_id=cuenta_origen.id,
         cuenta_destino_id=cuenta_destino.id,
-        monto=datos_transaccion.monto,
+        monto=monto_transferencia,
         tipo=datos_transaccion.tipo,
         estado="completada",
-        fecha=datetime.utcnow()
+        fecha=datetime.now(),
+        descripcion=(datos_transaccion.descripcion or "").strip(),
     )
 
-    # 💳 Actualizar saldos de ambas cuentas
-    cuenta_origen.saldo -= datos_transaccion.monto
-    cuenta_destino.saldo += datos_transaccion.monto
+    # 💳 7. Actualizar saldos
+    cuenta_origen.saldo = (saldo_origen - monto_transferencia).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    cuenta_destino.saldo = (Decimal(cuenta_destino.saldo) + monto_transferencia).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    # 💾 Guardar en base de datos
-    db.add(nueva_transaccion)
+    # 💾 8. Guardar cambios
+    db.add_all([nueva_transaccion, cuenta_origen, cuenta_destino])
     db.commit()
     db.refresh(nueva_transaccion)
 
-    # 🧠 Log de éxito (opcional)
-    log = LogMongo(
-        evento="TransferenciaExitosa",
-        mensaje=f"Se transfirieron ${datos_transaccion.monto} de cuenta {cuenta_origen.id} a {cuenta_destino.id}",
-        nivel="INFO",
-        usuario_id=usuario_id,
-        metadata={"origen": cuenta_origen.id, "destino": cuenta_destino.id}
-    )
-    try:
-        # Se guarda asincrónicamente pero no bloquea el proceso
-        import asyncio
-        asyncio.create_task(guardar_log(log))
-    except:
-        pass  # Silencioso por si no se puede usar asyncio
+    # ==========================================================
+    # 🧠 9. Logs y notificaciones
+    # ==========================================================
+    if background_tasks:
+        # Log de éxito
+        log_exito = LogMongo(
+            evento="TransferenciaExitosa",
+            mensaje=f"Se transfirieron ${monto_transferencia} de cuenta {cuenta_origen.id} a {cuenta_destino.id}",
+            nivel="INFO",
+            usuario_id=usuario_id,
+            metadata={
+                "origen": cuenta_origen.id,
+                "destino": cuenta_destino.id,
+                "monto": str(monto_transferencia),
+                "transaccion_id": nueva_transaccion.id,
+            },
+            correlation_id=correlation_id
+        )
+        background_tasks.add_task(guardar_log, log_exito)
 
-    # 📤 Devolver la transacción validada
+        # 📧 Emisor
+        emisor: Optional[Usuario] = db.get(Usuario, usuario_id)
+        if emisor and emisor.email:
+            try:
+                background_tasks.add_task(
+                    enviar_email_transferencia_exitosa,
+                    email=emisor.email,
+                    nombre=emisor.nombre,
+                    id_transaccion=nueva_transaccion.id,
+                    monto=nueva_transaccion.monto,
+                    cuenta_origen=cuenta_origen.id,
+                    cuenta_destino=cuenta_destino.id,
+                    fecha=nueva_transaccion.fecha.strftime("%Y-%m-%d %H:%M"),
+                    descripcion=nueva_transaccion.descripcion,
+                )
+            except Exception as e:
+                log_error_emisor = LogMongo(
+                    evento="ErrorNotificacionEmisor",
+                    mensaje=f"No se pudo enviar mail al emisor {emisor.email}: {str(e)}",
+                    nivel="ERROR",
+                    usuario_id=usuario_id,
+                    metadata={"transaccion_id": nueva_transaccion.id},
+                    correlation_id=correlation_id
+                )
+                background_tasks.add_task(guardar_log, log_error_emisor)
+
+        # 📧 Receptor
+        receptor: Optional[Usuario] = db.get(Usuario, cuenta_destino.usuario_id)
+        if receptor and receptor.email:
+            try:
+                background_tasks.add_task(
+                    enviar_email_transferencia_recibida,
+                    email=receptor.email,
+                    nombre=receptor.nombre,
+                    id_transaccion=nueva_transaccion.id,
+                    monto=nueva_transaccion.monto,
+                    cuenta_origen=cuenta_origen.id,
+                    cuenta_destino=cuenta_destino.id,
+                    fecha=nueva_transaccion.fecha.strftime("%Y-%m-%d %H:%M"),
+                    descripcion=nueva_transaccion.descripcion,
+                )
+            except Exception as e:
+                log_error_receptor = LogMongo(
+                    evento="ErrorNotificacionReceptor",
+                    mensaje=f"No se pudo enviar mail al receptor {receptor.email}: {str(e)}",
+                    nivel="ERROR",
+                    usuario_id=receptor.id,
+                    metadata={"transaccion_id": nueva_transaccion.id},
+                    correlation_id=correlation_id
+                )
+                background_tasks.add_task(guardar_log, log_error_receptor)
+
+    # 📤 10. Respuesta al cliente
     return TransaccionOut.model_validate(nueva_transaccion)
 
 
-# 📄 Obtener historial de transacciones del usuario (como emisor o receptor)
+# ==========================================================
+# 📄 Historial de transacciones de un usuario
+# ==========================================================
 def obtener_historial_usuario(
     usuario_id: int,
-    db: Session
+    db: Session,
+    skip: int = 0,
+    limit: int = 50,
 ) -> List[TransaccionOut]:
-    # 🔍 Obtener IDs de las cuentas del usuario
+    """
+    Devuelve historial de transacciones de un usuario:
+    - Incluye transacciones como origen o destino.
+    - Ordenadas por fecha descendente.
+    - Permite paginación opcional.
+    """
     cuentas_usuario = db.query(Cuenta.id).filter(Cuenta.usuario_id == usuario_id).subquery()
 
-    # 🔁 Buscar transacciones donde el usuario es origen o destino
-    transacciones = db.query(Transaccion).filter(
-        or_(
-            Transaccion.cuenta_origen_id.in_(cuentas_usuario),
-            Transaccion.cuenta_destino_id.in_(cuentas_usuario)
+    transacciones: List[Transaccion] = (
+        db.query(Transaccion)
+        .filter(
+            or_(
+                Transaccion.cuenta_origen_id.in_(cuentas_usuario),
+                Transaccion.cuenta_destino_id.in_(cuentas_usuario),
+            )
         )
-    ).order_by(Transaccion.fecha.desc()).all()
+        .order_by(Transaccion.fecha.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
-    # 🧾 Convertirlas a esquema Pydantic y devolver
     return [TransaccionOut.model_validate(t) for t in transacciones]
+

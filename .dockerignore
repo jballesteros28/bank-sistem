@@ -1,0 +1,48 @@
+# 🧠 Archivos y carpetas que no deben copiarse al contenedor
+
+# Directorios de control de versiones
+.git
+.gitignore
+
+# Entornos virtuales
+venv/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos temporales del sistema
+.DS_Store
+Thumbs.db
+
+# Cachés y artefactos
+*.log
+*.sqlite3
+*.db
+*.pid
+*.out
+
+# Archivos de dependencias locales o temporales
+*.egg-info
+dist/
+build/
+
+# Archivos de test locales
+tests/
+.coverage
+.pytest_cache/
+
+# Documentos o archivos personales
+*.pdf
+*.docx
+*.xlsx
+
+# Configs del IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Archivos de Docker (si estás en multi-stage)
+docker-compose.override.yml
+Dockerfile.dev

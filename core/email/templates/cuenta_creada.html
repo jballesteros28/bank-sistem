@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva cuenta creada</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f7f9fc; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); overflow: hidden; }
+        .header { background-color: #003366; color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; color: #333; }
+        .button { display: inline-block; margin-top: 20px; padding: 12px 20px; background-color: #003366; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .footer { background-color: #f0f0f0; text-align: center; padding: 15px; font-size: 13px; color: #777; }
+        .footer a { color: #003366; font-weight: bold; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Banco Sophia Intelligence</h1>
+    </div>
+    <div class="content">
+        <h2>🎉 ¡Tu nueva cuenta ha sido creada, {{ nombre }}!</h2>
+        <p>Estos son los detalles de tu nueva cuenta bancaria:</p>
+        <ul>
+            <li><strong>Número de cuenta:</strong> {{ numero_cuenta }}</li>
+            <li><strong>Tipo de cuenta:</strong> {{ tipo_cuenta }}</li>
+            <li><strong>Saldo inicial:</strong> ${{ saldo_inicial }}</li>
+            <li><strong>Estado:</strong> {{ estado }}</li>
+        </ul>
+        <p>Puedes acceder a tu cuenta y ver más detalles en el portal online.</p>
+        <a href="{{ url_portal }}" class="button">Acceder a mi cuenta</a>
+    </div>
+    <div class="footer">
+        Este mensaje fue enviado automáticamente.<br>
+        Si no solicitaste esta cuenta, <a href="{{ url_contacto }}">contactanos</a>.
+    </div>
+</div>
+</body>
+</html>

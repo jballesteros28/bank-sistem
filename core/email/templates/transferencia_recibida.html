@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Transferencia recibida</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f7f9fc; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); overflow: hidden; }
+        .header { background-color: #003366; color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; color: #333; }
+        .button { display: inline-block; margin-top: 20px; padding: 12px 20px; background-color: #003366; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .footer { background-color: #f0f0f0; text-align: center; padding: 15px; font-size: 13px; color: #777; }
+        .footer a { color: #003366; font-weight: bold; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Banco Sophia Intelligence</h1>
+    </div>
+    <div class="content">
+        <h2>💸 ¡Has recibido una transferencia, {{ nombre }}!</h2>
+        <p>Detalles de la operación:</p>
+        <ul>
+            <li><strong>ID de transacción:</strong> {{ id_transaccion }}</li>
+            <li><strong>Monto recibido:</strong> ${{ monto }}</li>
+            <li><strong>Cuenta origen:</strong> {{ cuenta_origen }}</li>
+            <li><strong>Cuenta destino:</strong> {{ cuenta_destino }}</li>
+            <li><strong>Fecha:</strong> {{ fecha }}</li>
+            {% if descripcion %}
+            <li><strong>Descripción:</strong> {{ descripcion }}</li>
+            {% endif %}
+        </ul>
+        <p>Puedes ver esta transacción iniciando sesión en tu cuenta.</p>
+        <a href="{{ url_portal }}" class="button">Ver mis transacciones</a>
+    </div>
+    <div class="footer">
+        Este mensaje fue generado automáticamente. 
+        Si no reconocés esta operación, <a href="{{ url_contacto }}">contactanos</a>.
+    </div>
+</div>
+</body>
+</html>

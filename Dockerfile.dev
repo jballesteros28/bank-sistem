@@ -1,0 +1,30 @@
+# 🐍 Imagen base para desarrollo
+FROM python:3.13-slim
+
+# Variables de entorno (más relajadas para debug)
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TZ=America/Argentina/Buenos_Aires
+
+WORKDIR /app
+
+# Dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar e instalar dependencias
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# Copiar la app completa
+COPY . .
+
+# Exponer puerto
+EXPOSE 8000
+
+# 🔥 Ejecutar FastAPI con auto-reload (modo dev)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

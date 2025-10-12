@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from schemas.transaccion import TransaccionCreate, TransaccionOut
 from services.transaccion_service import realizar_transferencia
@@ -18,8 +18,9 @@ router = APIRouter(
 def transferir_dinero(
     datos: TransaccionCreate,                      # 📥 Datos enviados por el usuario
     cuenta_origen_id: int,                         # 🆔 ID de la cuenta origen (en query o body)
+    background_task: BackgroundTasks,
     db: Session = Depends(get_db),                 # 🔌 Conexión a la base de datos
-    usuario: DatosUsuarioToken = Depends(get_current_user)  # 🔐 Usuario autenticado
+    usuario: DatosUsuarioToken = Depends(get_current_user),  # 🔐 Usuario autenticado
 ):
     """
     Realiza una transferencia entre la cuenta origen del usuario y otra cuenta de destino.
@@ -28,7 +29,9 @@ def transferir_dinero(
         usuario_id=usuario.id,
         cuenta_origen_id=cuenta_origen_id,
         datos_transaccion=datos,
-        db=db
+        db=db,
+        background_tasks=background_task,
+        
     )
 
 

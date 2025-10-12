@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ asunto }}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        .header {
+            background-color: #003366;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px;
+            color: #333333;
+        }
+        .content h2 {
+            color: #003366;
+        }
+        .button {
+            display: inline-block;
+            background-color: #003366;
+            color: white;
+            padding: 12px 24px;
+            margin: 20px 0;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .footer {
+            background-color: #f0f0f0;
+            text-align: center;
+            font-size: 13px;
+            color: #777777;
+            padding: 15px;
+        }
+        .footer a {
+            color: #003366;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Banco Sophia Intelligence</h1>
+    </div>
+    <div class="content">
+        <h2>{{ titulo }}</h2>
+        <p>{{ mensaje }}</p>
+        {% if destacado %}
+        <p><strong>{{ destacado }}</strong></p>
+        {% endif %}
+        {% if accion_url and accion_texto %}
+        <p style="text-align: center;">
+            <a href="{{ accion_url }}" class="button">{{ accion_texto }}</a>
+        </p>
+        {% endif %}
+        <p>Saludos,<br><strong>El equipo de Banco Sophia Intelligence</strong></p>
+    </div>
+    <div class="footer">
+        Este mensaje fue generado automáticamente. Si no esperabas este correo,
+        <a href="#">contactanos</a>.
+    </div>
+</div>
+</body>
+</html>
