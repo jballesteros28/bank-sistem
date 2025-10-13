@@ -130,15 +130,61 @@ Copiar código
 
 ---
 
-### 🪄 Próximos pasos sugeridos
+## 🔐 Funcionalidades principales
 
-1️⃣ Crear `.env.example` con el bloque de ejemplo del README.  
-2️⃣ Confirmar que `.gitignore` y `.dockerignore` excluyen tu `.env` real.  
-3️⃣ Subir a GitHub:
-```bash
-git init
-git add .
-git commit -m "🚀 Versión pública del backend bancario"
-git branch -M main
-git remote add origin https://github.com/tuusuario/sistema-bancario-backend.git
-git push -u origin main
+### ✅ Autenticación
+- Registro y login con JWT
+- Validaciones estrictas de email y contraseña
+- Roles (`cliente`, `admin`, `soporte`)
+
+### 👥 Usuarios y cuentas
+- Crear/ver cuentas bancarias
+- Consultar saldo y estado
+- Cambiar contraseña y editar perfil
+- Congelar/reactivar cuentas (admin)
+
+### 💸 Transacciones
+- Transferencias seguras entre cuentas
+- Ver historial (como emisor o receptor)
+- Validaciones de saldo, estado y pertenencia
+
+### 🛠️ Administración (solo para admins)
+- Listar y gestionar usuarios
+- Cambiar roles
+- Congelar cuentas
+- Consultar logs persistentes (MongoDB)
+- Reportes: transacciones por fecha, estado de cuentas
+
+---
+
+## 🔔 Notificaciones (fase activa)
+
+En esta etapa se implementa el módulo de notificaciones para auditar y alertar al usuario:
+
+- 📩 Simulación/envío de emails
+- 📦 Registro de eventos importantes en MongoDB (login fallido, errores, transferencias)
+- 🔔 (Opcional) WebSocket para notificaciones en tiempo real
+
+---
+
+## 🧪 Próximos pasos
+
+- Implementar sistema de notificaciones email/alerta
+- Agregar WebSocket para push en tiempo real
+- Crear frontend con React clásico
+- Tests unitarios (`pytest`)
+- Dockerización + despliegue
+
+---
+
+## 🧠 Autor
+
+**Juan David Ballesteros**  
+Desarrollador Full Stack | Backend con Python, FastAPI y bases de datos relacionales y no relacionales.  
+🔗 [LinkedIn](https://www.linkedin.com/in/juan-david-ballesteros-413350260)
+
+---
+
+## 📜 Licencia
+
+MIT © 2025 - Juan David Ballesteros
