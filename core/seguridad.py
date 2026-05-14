@@ -109,6 +109,7 @@ async def get_current_user(
             email=usuario.email,
             nombre=usuario.nombre,
             rol=usuario.rol.value if hasattr(usuario.rol, "value") else usuario.rol,
+            organizacion_id=usuario.organizacion_id,
         )
 
     # 🚫 Token expirado

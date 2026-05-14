@@ -11,9 +11,28 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 import requests
+import pytest
 from unittest.mock import AsyncMock, patch
 
 BASE_URL = "http://127.0.0.1:8000"
+
+
+def _backend_disponible() -> bool:
+    try:
+        requests.get(f"{BASE_URL}/", timeout=0.5)
+        return True
+    except requests.RequestException:
+        return False
+
+
+def _ejecutar_tests_manuales() -> bool:
+    return os.getenv("RUN_MANUAL_HTTP_TESTS") == "1" and _backend_disponible()
+
+
+pytestmark = pytest.mark.skipif(
+    not _ejecutar_tests_manuales(),
+    reason="Tests manuales: requieren RUN_MANUAL_HTTP_TESTS=1 y backend FastAPI en 127.0.0.1:8000.",
+)
 
 
 # -------------------------------------------------------------------

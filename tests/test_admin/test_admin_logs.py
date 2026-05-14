@@ -1,5 +1,7 @@
 # tests/manual_test_logs.py
 import requests
+import pytest
+import os
 from core.config import settings
 from init_seed import init_seed
 from services.auth_service import crear_token
@@ -15,8 +17,29 @@ BASE_URL = "http://127.0.0.1:8000"
 ADMIN_EMAIL = "admin@sistemabancario.com"
 EMISOR_EMAIL = "emisor@test.com"
 
-# Inicializamos los datos si hace falta
-init_seed()
+
+def _backend_disponible() -> bool:
+    try:
+        requests.get(f"{BASE_URL}/", timeout=0.5)
+        return True
+    except requests.RequestException:
+        return False
+
+
+def _ejecutar_tests_manuales() -> bool:
+    return os.getenv("RUN_MANUAL_HTTP_TESTS") == "1" and _backend_disponible()
+
+
+pytestmark = pytest.mark.skipif(
+    not _ejecutar_tests_manuales(),
+    reason="Tests manuales: requieren RUN_MANUAL_HTTP_TESTS=1 y backend FastAPI en 127.0.0.1:8000.",
+)
+
+BACKEND_DISPONIBLE = _ejecutar_tests_manuales()
+
+if BACKEND_DISPONIBLE:
+    # Inicializamos los datos si hace falta solo cuando se ejecutan los tests manuales.
+    init_seed()
 
 
 def _token_para_usuario(email: str) -> str:
@@ -37,8 +60,8 @@ def _token_para_usuario(email: str) -> str:
 # =============================
 # 🔑 Generar tokens
 # =============================
-admin_token = _token_para_usuario(ADMIN_EMAIL)
-emisor_token = _token_para_usuario(EMISOR_EMAIL)
+admin_token = _token_para_usuario(ADMIN_EMAIL) if BACKEND_DISPONIBLE else ""
+emisor_token = _token_para_usuario(EMISOR_EMAIL) if BACKEND_DISPONIBLE else ""
 
 # =============================
 # 🧪 Tests manuales de endpoints de logs

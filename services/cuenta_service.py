@@ -11,6 +11,7 @@ from core.enums import EstadoCuenta
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 import random
+from services.organizacion_service import obtener_o_crear_organizacion_demo
 
 
 # ==========================================================
@@ -35,6 +36,17 @@ def crear_cuenta(
     request: Optional[Request] = None
 ) -> CuentaOut:
     """Crea una nueva cuenta bancaria y envía correo de confirmación."""
+    titular = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not titular:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado.",
+        )
+    if titular.organizacion_id is None:
+        # Los usuarios heredados se asignan a la organizacion demo al crear su primera cuenta nueva.
+        titular.organizacion_id = obtener_o_crear_organizacion_demo(db).id
+        db.add(titular)
+
     cuenta_existente = db.query(Cuenta).filter(
         Cuenta.usuario_id == usuario_id,
         Cuenta.tipo == cuenta_datos.tipo,
@@ -53,12 +65,11 @@ def crear_cuenta(
         saldo=Decimal("0.00"),
         estado=EstadoCuenta.activa,
         usuario_id=usuario_id,
+        organizacion_id=titular.organizacion_id,
     )
     db.add(nueva_cuenta)
     db.commit()
     db.refresh(nueva_cuenta)
-
-    titular = db.query(Usuario).filter(Usuario.id == usuario_id).first()
 
     if background_tasks:
         correlation_id = getattr(request.state, "correlation_id", None) if request else None

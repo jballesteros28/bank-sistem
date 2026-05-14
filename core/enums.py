@@ -43,3 +43,10 @@ class EstadoNotificacion(StrEnum):
     QUEUED = "QUEUED"
     SENT = "SENT"
     FAILED = "FAILED"
+
+
+# Estados de una organizacion SaaS dentro de la plataforma.
+class EstadoOrganizacion(StrEnum):
+    activa = "activa"
+    inactiva = "inactiva"
+    suspendida = "suspendida"

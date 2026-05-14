@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Literal
+from uuid import UUID
 
 # 🔐 Datos esperados al momento de registrar un nuevo usuario
 class RegistroUsuario(BaseModel):
@@ -44,4 +45,5 @@ class DatosUsuarioToken(BaseModel):
     email: EmailStr = Field(..., description="Email del usuario autenticado")
     nombre: str = Field(..., description="Nombre completo del usuario")
     rol: str = Field(..., description="Rol del usuario (cliente, admin, etc.)")
+    organizacion_id: UUID | None = Field(default=None, description="Organizacion asociada al usuario")
 

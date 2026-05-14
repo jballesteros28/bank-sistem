@@ -13,6 +13,7 @@ from core.enums import EstadoCuenta
 from core.excepciones import SaldoInsuficienteError, respuesta_error_estandar
 from services.log_service import guardar_log
 from models.log import LogMongo
+from services.organizacion_service import obtener_o_crear_organizacion_demo
 
 # 📧 Enviadores especializados
 from services.enviadores_email.transferencia_exitosa import enviar_email_transferencia_exitosa
@@ -161,6 +162,15 @@ def realizar_transferencia(
         raise SaldoInsuficienteError("El saldo de la cuenta origen no es suficiente.")
 
     # 🧾 6. Registrar transacción
+    organizacion_id = cuenta_origen.organizacion_id or cuenta_destino.organizacion_id
+    if organizacion_id is None:
+        # Las cuentas historicas sin organizacion se enlazan a la organizacion demo.
+        organizacion_id = obtener_o_crear_organizacion_demo(db).id
+    if cuenta_origen.organizacion_id is None:
+        cuenta_origen.organizacion_id = organizacion_id
+    if cuenta_destino.organizacion_id is None:
+        cuenta_destino.organizacion_id = organizacion_id
+
     nueva_transaccion = Transaccion(
         cuenta_origen_id=cuenta_origen.id,
         cuenta_destino_id=cuenta_destino.id,
@@ -169,6 +179,7 @@ def realizar_transferencia(
         estado="completada",
         fecha=datetime.now(),
         descripcion=(datos_transaccion.descripcion or "").strip(),
+        organizacion_id=organizacion_id,
     )
 
     # 💳 7. Actualizar saldos

@@ -108,3 +108,4 @@ logs/
 .env.dev
 .env.prod
 .env.example  # <- solo subís este, el real no.
+.codex_tmp/

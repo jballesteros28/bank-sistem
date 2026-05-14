@@ -17,7 +17,7 @@ class ResetPasswordToken(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
     token: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    expiracion: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    expiracion: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
     intentos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     usado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

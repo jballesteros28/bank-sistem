@@ -8,6 +8,7 @@ from typing import Any
 from services.log_service import guardar_log
 from models.log import LogMongo
 from datetime import datetime, timedelta
+from services.organizacion_service import obtener_o_crear_organizacion_demo
 
 # 👇 Enviadores especializados
 from services.enviadores_email.bienvenida import enviar_email_bienvenida
@@ -44,6 +45,7 @@ def registrar_usuario(
 
     # 🔐 Crear usuario
     hashed_pw = hash_password(password)
+    organizacion = obtener_o_crear_organizacion_demo(db)
     nuevo_usuario = Usuario(
         nombre=nombre,
         email=email,
@@ -51,7 +53,8 @@ def registrar_usuario(
         es_activo=True,
         rol=RolUsuario.cliente,
         intentos_fallidos=0,
-        bloqueado_hasta=None
+        bloqueado_hasta=None,
+        organizacion_id=organizacion.id,
     )
 
     db.add(nuevo_usuario)
@@ -231,7 +234,8 @@ async def login_usuario(
         "id": usuario.id,
         "email": usuario.email,
         "nombre": usuario.nombre,
-        "rol": usuario.rol
+        "rol": usuario.rol,
+        "organizacion_id": str(usuario.organizacion_id) if usuario.organizacion_id else None,
     }
     access_token: str = crear_token(token_data)
 

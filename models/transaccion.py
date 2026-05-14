@@ -2,10 +2,15 @@
 # Importaciones necesarias
 # ─────────────────────────────────────────────────────────────────────────────
 
+from __future__ import annotations
+
+import uuid
+
 from sqlalchemy import NUMERIC, ForeignKey, String
 # Tipos de columnas de SQLAlchemy
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum  # ENUM nativo de PostgreSQL
-from sqlalchemy.orm import Mapped, mapped_column  # Tipado moderno para modelos ORM
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship  # Tipado moderno para modelos ORM
 from datetime import datetime  # Para manejar fechas de forma predeterminada
 from database.db_postgres import Base  # Clase base declarativa SQLAlchemy
 from core.enums import TipoTransaccion, EstadoTransaccion  # Enums definidos en el proyecto
@@ -51,7 +56,7 @@ class Transaccion(Base):
 
     # 📅 Fecha en la que se ejecutó la transacción (por defecto, ahora)
     fecha: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow    # Asigna la fecha y hora actual automáticamente
+        default=datetime.now   # Asigna la fecha y hora actual automáticamente
     )
 
     # 📌 Estado de la transacción (completada, fallida, pendiente)
@@ -64,4 +69,27 @@ class Transaccion(Base):
         default=EstadoTransaccion.completada  # Valor por defecto: completada
     )
     
-    descripcion: Mapped[str] = mapped_column(String, nullable=True)
+    descripcion: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Organizacion donde se origina la transaccion. Nullable para migrar historico existente.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("organizaciones.id"),
+        nullable=True,
+        index=True,
+    )
+
+    organizacion: Mapped["Organizacion | None"] = relationship(
+        "Organizacion",
+        back_populates="transacciones",
+    )
+    cuenta_origen: Mapped["Cuenta"] = relationship(
+        "Cuenta",
+        foreign_keys=[cuenta_origen_id],
+        back_populates="transacciones_origen",
+    )
+    cuenta_destino: Mapped["Cuenta"] = relationship(
+        "Cuenta",
+        foreign_keys=[cuenta_destino_id],
+        back_populates="transacciones_destino",
+    )

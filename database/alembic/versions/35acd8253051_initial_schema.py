@@ -22,11 +22,11 @@ def upgrade() -> None:
     """Upgrade schema con enums explícitos."""
 
     # Crear enums explícitamente
-    rol_enum = postgresql.ENUM('cliente', 'admin', 'soporte', name='rolusuario')
-    tipo_cuenta_enum = postgresql.ENUM('ahorro', 'corriente', 'sueldo', name='tipocuenta')
-    estado_cuenta_enum = postgresql.ENUM('activa', 'inactiva', 'congelada', name='estadocuenta')
-    tipo_transaccion_enum = postgresql.ENUM('transferencia', 'deposito', 'retiro', name='tipotransaccion')
-    estado_transaccion_enum = postgresql.ENUM('completada', 'fallida', 'pendiente', name='estadotransaccion')
+    rol_enum = postgresql.ENUM('cliente', 'admin', 'soporte', name='rolusuario', create_type=False)
+    tipo_cuenta_enum = postgresql.ENUM('ahorro', 'corriente', 'sueldo', name='tipocuenta', create_type=False)
+    estado_cuenta_enum = postgresql.ENUM('activa', 'inactiva', 'congelada', name='estadocuenta', create_type=False)
+    tipo_transaccion_enum = postgresql.ENUM('transferencia', 'deposito', 'retiro', name='tipotransaccion', create_type=False)
+    estado_transaccion_enum = postgresql.ENUM('completada', 'fallida', 'pendiente', name='estadotransaccion', create_type=False)
 
     rol_enum.create(op.get_bind(), checkfirst=True)
     tipo_cuenta_enum.create(op.get_bind(), checkfirst=True)
@@ -49,6 +49,21 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_usuarios_email'), 'usuarios', ['email'], unique=True)
     op.create_index(op.f('ix_usuarios_id'), 'usuarios', ['id'], unique=False)
+
+    # Tabla tokens de reseteo de contrasena
+    op.create_table(
+        'reset_password_tokens',
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('usuario_id', sa.Integer(), nullable=False),
+        sa.Column('token', sa.String(length=255), nullable=False),
+        sa.Column('expiracion', sa.DateTime(), nullable=False),
+        sa.Column('intentos', sa.Integer(), nullable=False, server_default="0"),
+        sa.Column('usado', sa.Boolean(), nullable=False, server_default=sa.sql.expression.false()),
+        sa.ForeignKeyConstraint(['usuario_id'], ['usuarios.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id'),
+    )
+    op.create_index(op.f('ix_reset_password_tokens_id'), 'reset_password_tokens', ['id'], unique=False)
+    op.create_index(op.f('ix_reset_password_tokens_token'), 'reset_password_tokens', ['token'], unique=True)
 
     # Tabla cuentas
     op.create_table(
@@ -91,6 +106,9 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_cuentas_numero'), table_name='cuentas')
     op.drop_index(op.f('ix_cuentas_id'), table_name='cuentas')
     op.drop_table('cuentas')
+    op.drop_index(op.f('ix_reset_password_tokens_token'), table_name='reset_password_tokens')
+    op.drop_index(op.f('ix_reset_password_tokens_id'), table_name='reset_password_tokens')
+    op.drop_table('reset_password_tokens')
     op.drop_index(op.f('ix_usuarios_id'), table_name='usuarios')
     op.drop_index(op.f('ix_usuarios_email'), table_name='usuarios')
     op.drop_table('usuarios')

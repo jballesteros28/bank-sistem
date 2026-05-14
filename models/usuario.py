@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, Integer, DateTime
+from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum  # ✅ Enum nativo PostgreSQL
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from database.db_postgres import Base
 from core.enums import RolUsuario
-from datetime import datetime
+
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -35,6 +41,22 @@ class Usuario(Base):
 
     # ⏳ Bloqueo temporal de login
     bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Organizacion a la que pertenece el usuario. Es nullable para migrar datos existentes.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("organizaciones.id"),
+        nullable=True,
+        index=True,
+    )
+
+    organizacion: Mapped["Organizacion | None"] = relationship(
+        "Organizacion",
+        back_populates="usuarios",
+    )
+
+    # Relacion con las cuentas del usuario, preservando el flujo usuario -> cuenta.
+    cuentas: Mapped[list["Cuenta"]] = relationship("Cuenta", back_populates="usuario")
 
     # 🔗 Relación con tokens de reseteo de contraseña
     tokens_reset: Mapped[list["ResetPasswordToken"]] = relationship(

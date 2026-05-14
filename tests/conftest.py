@@ -42,25 +42,35 @@ def patch_background_tasks():
     para evitar dependencias externas (SMTP, Mongo) durante los tests.
     """
     import services.auth_service as auth_svc
+    import services.admin_service as admin_svc
+    import services.cuenta_service as cuenta_svc
     import services.email_service as email_svc
     import services.log_service as log_svc
     import services.reset_password_service as reset_svc
+    import services.transaccion_service as transaccion_svc
+    import core.seguridad as seguridad_svc
     import services.enviadores_email.reset_password as reset_mail
     import core.excepciones as exc_mod
 
     # Neutralizar enviadores de correo
-    for svc in (auth_svc, email_svc, reset_mail):
+    for svc in (auth_svc, admin_svc, cuenta_svc, email_svc, reset_mail, transaccion_svc):
         for fn_name in (
             "enviar_email_bienvenida",
             "enviar_email_actividad_sospechosa",
+            "enviar_email_ajuste_saldo",
+            "enviar_email_cambio_rol",
+            "enviar_email_cuenta_congelada",
+            "enviar_email_cuenta_creada",
             "enviar_email_reset_password",
+            "enviar_email_transferencia_exitosa",
+            "enviar_email_transferencia_recibida",
             "enviar_email",
         ):
             if hasattr(svc, fn_name):
                 setattr(svc, fn_name, _noop_async)
 
     # Neutralizar logs
-    for mod in (auth_svc, log_svc, exc_mod, reset_svc):
+    for mod in (auth_svc, admin_svc, cuenta_svc, exc_mod, log_svc, reset_svc, seguridad_svc, transaccion_svc):
         for fn_name in ("guardar_log", "guardar_log_correo"):
             if hasattr(mod, fn_name):
                 setattr(mod, fn_name, _noop_async)

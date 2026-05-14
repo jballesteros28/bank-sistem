@@ -102,12 +102,13 @@ async def validate_reset(
 @router.post("/reset-password", response_model=ResetPasswordResponse)
 async def reset_password(
     payload: ResetPasswordConfirm,
+    background_task: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> ResetPasswordResponse:
     """
     Permite al usuario restablecer su contraseña usando un código válido.
     """
     await reset_password_service.confirmar_reset(
-        payload.email, payload.codigo, payload.nueva_password, db
+        payload.email, payload.codigo, payload.nueva_password, db,background_task
     )
     return ResetPasswordResponse(msg="Tu contraseña ha sido restablecida exitosamente")

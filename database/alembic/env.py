@@ -15,6 +15,7 @@ from database.db_postgres import Base  # incluye todos los modelos aquí
 from models.usuario import Usuario
 from models.cuenta import Cuenta
 from models.transaccion import Transaccion
+from models.organizacion import Organizacion
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
