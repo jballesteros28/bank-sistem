@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.dependencias import get_db
@@ -16,16 +16,24 @@ router = APIRouter(prefix="/transacciones", tags=["Transacciones"])
 @router.post("/", response_model=TransaccionOut, status_code=status.HTTP_201_CREATED)
 def transferir_dinero(
     datos: TransaccionCreate,
-    cuenta_origen_id: int,
     background_task: BackgroundTasks,
+    cuenta_origen_id: int | None = Query(default=None, gt=0),
+    wallet_origen_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
     usuario: DatosUsuarioToken = Depends(get_current_user),
     organizacion: Organizacion = Depends(get_current_organizacion),
 ) -> TransaccionOut:
     """Realiza una transferencia dentro de la organizacion del usuario."""
+    origen_id = cuenta_origen_id or wallet_origen_id
+    if origen_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Debe informar cuenta_origen_id o wallet_origen_id.",
+        )
+
     return realizar_transferencia(
         usuario_id=usuario.id,
-        cuenta_origen_id=cuenta_origen_id,
+        cuenta_origen_id=origen_id,
         organizacion_id=organizacion.id,
         datos_transaccion=datos,
         db=db,

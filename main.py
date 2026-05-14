@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.auth import routes as auth_routes
 from app.usuarios import routes as usuarios_routes
 from app.cuentas import routes as cuentas_routes
+from app.wallets import routes as wallets_routes
 from app.transacciones import routes as transacciones_routes
 from app.organizaciones import routes as organizaciones_routes
 from app.admin import routes as admin_routes
@@ -130,6 +131,7 @@ app.add_exception_handler(Exception, manejar_error_general)
 app.include_router(auth_routes.router)
 app.include_router(usuarios_routes.router)
 app.include_router(cuentas_routes.router)
+app.include_router(wallets_routes.router)
 app.include_router(transacciones_routes.router)
 app.include_router(organizaciones_routes.router)
 app.include_router(admin_routes.router)

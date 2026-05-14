@@ -1,39 +1,54 @@
 from __future__ import annotations
 
 import uuid
-
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, NUMERIC, ForeignKey, Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
-from database.db_postgres import Base
-from core.enums import TipoCuenta, EstadoCuenta
+from datetime import datetime
 from decimal import Decimal
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, NUMERIC, String, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.enums.wallet_enum import MonedaWallet
+from core.enums import EstadoCuenta, TipoCuenta
+from database.db_postgres import Base
+
 
 class Cuenta(Base):
     __tablename__ = "cuentas"
 
-    # 🔑 Identificador único de la cuenta
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-
-    # 📄 Número de cuenta único
     numero: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
 
-    # 💳 Tipo de cuenta (ej: ahorro, corriente, sueldo, etc.)
+    # Se mantiene el campo historico para no romper /cuentas; Fase 3 agrega
+    # valores compatibles con wallets en el enum existente de PostgreSQL.
     tipo: Mapped[TipoCuenta] = mapped_column(
         SQLEnum(TipoCuenta, name="tipocuenta", create_constraint=False),
-        nullable=False
+        nullable=False,
     )
 
-    # 💰 Saldo actual de la cuenta
-    saldo: Mapped[Decimal] = mapped_column(NUMERIC(12, 2), default=0)
+    # Campos SaaS de wallet agregados sobre la tabla existente "cuentas".
+    alias: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    moneda: Mapped[MonedaWallet] = mapped_column(
+        SQLEnum(MonedaWallet, name="moneda_wallet", create_constraint=False),
+        nullable=False,
+        default=MonedaWallet.ARS,
+        server_default=MonedaWallet.ARS.value,
+    )
+    limite_operacion: Mapped[Decimal | None] = mapped_column(NUMERIC(12, 2), nullable=True)
+    es_principal: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
-    # 📌 Estado de la cuenta (activa, inactiva, congelada)
+    saldo: Mapped[Decimal] = mapped_column(NUMERIC(12, 2), default=0)
     estado: Mapped[EstadoCuenta] = mapped_column(
         SQLEnum(EstadoCuenta, name="estadocuenta", create_constraint=False),
-        default=EstadoCuenta.activa
+        default=EstadoCuenta.activa,
     )
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-    # 🔗 Relación con el usuario dueño de la cuenta
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
 
     # Organizacion propietaria de la cuenta. Nullable permite migrar cuentas existentes.

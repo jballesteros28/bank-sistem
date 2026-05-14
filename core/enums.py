@@ -10,15 +10,19 @@ class RolUsuario(StrEnum):
 
 # 💳 Tipos de cuenta bancaria
 class TipoCuenta(StrEnum):
+    principal = "principal"
     ahorro = "ahorro"
     corriente = "corriente"
     sueldo = "sueldo"
+    recompensas = "recompensas"
+    empresa = "empresa"
 
 # 📌 Estados posibles de una cuenta
 class EstadoCuenta(StrEnum):
     activa = "activa"
     inactiva = "inactiva"
     congelada = "congelada"
+    cerrada = "cerrada"
 
 # 📤 Tipos de transacciones
 class TipoTransaccion(StrEnum):

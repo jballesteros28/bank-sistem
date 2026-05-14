@@ -120,7 +120,7 @@ def realizar_transferencia(
         )
 
     if cuenta_destino.organizacion_id != organizacion_id:
-        # Fase 2: las transferencias entre organizaciones no estan permitidas.
+        # Fase 2/Fase 3: las operaciones siguen aisladas por organizacion.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No se permiten transferencias entre organizaciones.",
@@ -133,6 +133,17 @@ def realizar_transferencia(
         )
 
     # ❄️ 3. Validar estados
+    if cuenta_origen.estado == EstadoCuenta.cerrada:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La wallet origen esta cerrada.",
+        )
+    if cuenta_destino.estado == EstadoCuenta.cerrada:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La wallet destino esta cerrada.",
+        )
+
     if cuenta_origen.estado != EstadoCuenta.activa:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -145,6 +156,12 @@ def realizar_transferencia(
         )
 
     # 💰 4. Normalizar montos
+    if cuenta_origen.moneda != cuenta_destino.moneda:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se permiten transferencias entre wallets de distinta moneda.",
+        )
+
     monto_transferencia: Decimal = Decimal(datos_transaccion.monto).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     saldo_origen: Decimal = Decimal(cuenta_origen.saldo).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -156,6 +173,17 @@ def realizar_transferencia(
         )
 
     # 💸 5. Validar saldo suficiente
+    if cuenta_origen.limite_operacion is not None:
+        limite_operacion = Decimal(cuenta_origen.limite_operacion).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+        if monto_transferencia > limite_operacion:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El monto supera el limite de operacion de la wallet origen.",
+            )
+
     if saldo_origen < monto_transferencia:
         if background_tasks:
             log = LogMongo(
