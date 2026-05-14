@@ -5,6 +5,7 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Dict, Any
+from uuid import UUID
 
 from schemas.usuario import CambiarRolUsuario, UsuarioOut
 from schemas.cuenta import CambiarEstadoCuenta
@@ -24,10 +25,23 @@ from services.enviadores_email.cuenta_congelada import enviar_email_cuenta_conge
 # ================================================================
 # 👥 Obtener todos los usuarios (paginado)
 # ================================================================
-def obtener_usuarios(db: Session, skip: int = 0, limit: int = 10, admin_id: int | None = None, endpoint: str | None = None, background_tasks: BackgroundTasks | None = None) -> List[UsuarioOut]:
+def obtener_usuarios(
+    db: Session,
+    skip: int = 0,
+    limit: int = 10,
+    admin_id: int | None = None,
+    endpoint: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
+    organizacion_id: UUID | None = None,
+) -> List[UsuarioOut]:
     """Devuelve todos los usuarios registrados (con paginación)."""
 
-    usuarios: List[Usuario] = db.query(Usuario).offset(skip).limit(limit).all()
+    query = db.query(Usuario)
+    if organizacion_id is not None:
+        # El admin comun solo lista usuarios de su tenant.
+        query = query.filter(Usuario.organizacion_id == organizacion_id)
+
+    usuarios: List[Usuario] = query.offset(skip).limit(limit).all()
 
     # 🧠 Log de auditoría
     if background_tasks and admin_id:
@@ -57,10 +71,15 @@ def cambiar_rol_usuario(
     admin_id: int,
     endpoint: str,
     background_tasks: BackgroundTasks,
+    organizacion_id: UUID | None = None,
 ) -> UsuarioOut:
     """Permite a un administrador cambiar el rol de un usuario."""
 
-    usuario: Usuario | None = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    usuario_query = db.query(Usuario).filter(Usuario.id == usuario_id)
+    if organizacion_id is not None:
+        # Los admins comunes no pueden modificar usuarios de otros tenants.
+        usuario_query = usuario_query.filter(Usuario.organizacion_id == organizacion_id)
+    usuario: Usuario | None = usuario_query.first()
     if not usuario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
@@ -127,10 +146,15 @@ def cambiar_estado_cuenta(
     admin_id: int,
     endpoint: str,
     background_tasks: BackgroundTasks,
+    organizacion_id: UUID | None = None,
 ) -> Cuenta:
     """Permite a un administrador cambiar el estado de una cuenta bancaria."""
 
-    cuenta: Cuenta | None = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
+    cuenta_query = db.query(Cuenta).filter(Cuenta.id == cuenta_id)
+    if organizacion_id is not None:
+        # La cuenta administrada debe pertenecer a la organizacion del admin.
+        cuenta_query = cuenta_query.filter(Cuenta.organizacion_id == organizacion_id)
+    cuenta: Cuenta | None = cuenta_query.first()
     if not cuenta:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuenta no encontrada")
 
@@ -194,13 +218,21 @@ def cambiar_estado_cuenta(
 # ================================================================
 # 📈 Reporte de transacciones entre fechas
 # ================================================================
-def reporte_transacciones_por_fecha(desde: datetime, hasta: datetime, db: Session, admin_id: int | None = None, endpoint: str | None = None, background_tasks: BackgroundTasks | None = None) -> List[TransaccionOut]:
-    transacciones = (
-        db.query(Transaccion)
-        .filter(and_(Transaccion.fecha >= desde, Transaccion.fecha <= hasta))
-        .order_by(Transaccion.fecha.desc())
-        .all()
-    )
+def reporte_transacciones_por_fecha(
+    desde: datetime,
+    hasta: datetime,
+    db: Session,
+    admin_id: int | None = None,
+    endpoint: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
+    organizacion_id: UUID | None = None,
+) -> List[TransaccionOut]:
+    query = db.query(Transaccion).filter(and_(Transaccion.fecha >= desde, Transaccion.fecha <= hasta))
+    if organizacion_id is not None:
+        # El reporte se acota al tenant del admin comun.
+        query = query.filter(Transaccion.organizacion_id == organizacion_id)
+
+    transacciones = query.order_by(Transaccion.fecha.desc()).all()
 
     if background_tasks and admin_id:
         try:
@@ -222,8 +254,18 @@ def reporte_transacciones_por_fecha(desde: datetime, hasta: datetime, db: Sessio
 # ================================================================
 # 📊 Resumen de cuentas por estado
 # ================================================================
-def resumen_cuentas_por_estado(db: Session, admin_id: int | None = None, endpoint: str | None = None, background_tasks: BackgroundTasks | None = None) -> Dict[str, int]:
-    resultados = db.query(Cuenta.estado, func.count()).group_by(Cuenta.estado).all()
+def resumen_cuentas_por_estado(
+    db: Session,
+    admin_id: int | None = None,
+    endpoint: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
+    organizacion_id: UUID | None = None,
+) -> Dict[str, int]:
+    query = db.query(Cuenta.estado, func.count())
+    if organizacion_id is not None:
+        # Solo cuenta estados de cuentas dentro de la organizacion administrada.
+        query = query.filter(Cuenta.organizacion_id == organizacion_id)
+    resultados = query.group_by(Cuenta.estado).all()
     resumen = {estado.value: 0 for estado in EstadoCuenta}
     for estado, cantidad in resultados:
         resumen[estado] = cantidad
@@ -248,8 +290,18 @@ def resumen_cuentas_por_estado(db: Session, admin_id: int | None = None, endpoin
 # ================================================================
 # 📊 Reporte de usuarios activos / inactivos
 # ================================================================
-def reporte_usuarios_activos(db: Session, admin_id: int | None = None, endpoint: str | None = None, background_tasks: BackgroundTasks | None = None) -> Dict[str, int]:
-    resultados = db.query(Usuario.es_activo, func.count()).group_by(Usuario.es_activo).all()
+def reporte_usuarios_activos(
+    db: Session,
+    admin_id: int | None = None,
+    endpoint: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
+    organizacion_id: UUID | None = None,
+) -> Dict[str, int]:
+    query = db.query(Usuario.es_activo, func.count())
+    if organizacion_id is not None:
+        # El resumen de usuarios no cruza limites de organizacion.
+        query = query.filter(Usuario.organizacion_id == organizacion_id)
+    resultados = query.group_by(Usuario.es_activo).all()
     resumen = {"activos": 0, "inactivos": 0}
     for es_activo, cantidad in resultados:
         resumen["activos" if es_activo else "inactivos"] = cantidad
@@ -274,8 +326,18 @@ def reporte_usuarios_activos(db: Session, admin_id: int | None = None, endpoint:
 # ================================================================
 # 📊 Reporte de saldos por tipo de cuenta
 # ================================================================
-def reporte_saldos_por_tipo_cuenta(db: Session, admin_id: int | None = None, endpoint: str | None = None, background_tasks: BackgroundTasks | None = None) -> Dict[str, float]:
-    resultados = db.query(Cuenta.tipo, func.sum(Cuenta.saldo)).group_by(Cuenta.tipo).all()
+def reporte_saldos_por_tipo_cuenta(
+    db: Session,
+    admin_id: int | None = None,
+    endpoint: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
+    organizacion_id: UUID | None = None,
+) -> Dict[str, float]:
+    query = db.query(Cuenta.tipo, func.sum(Cuenta.saldo))
+    if organizacion_id is not None:
+        # Los saldos agregados se calculan solo para el tenant administrado.
+        query = query.filter(Cuenta.organizacion_id == organizacion_id)
+    resultados = query.group_by(Cuenta.tipo).all()
     resumen = {tipo.value: float(total or 0) for tipo, total in resultados}
 
     if background_tasks and admin_id:
@@ -298,8 +360,15 @@ def reporte_saldos_por_tipo_cuenta(db: Session, admin_id: int | None = None, end
 # ================================================================
 # 🏆 Top 10 usuarios con más transacciones
 # ================================================================
-def top_usuarios_transacciones(db: Session, limit: int = 10, admin_id: int | None = None, endpoint: str | None = None, background_tasks: BackgroundTasks | None = None) -> List[Dict[str, Any]]:
-    resultados = (
+def top_usuarios_transacciones(
+    db: Session,
+    limit: int = 10,
+    admin_id: int | None = None,
+    endpoint: str | None = None,
+    background_tasks: BackgroundTasks | None = None,
+    organizacion_id: UUID | None = None,
+) -> List[Dict[str, Any]]:
+    query = (
         db.query(
             Usuario.id,
             Usuario.nombre,
@@ -312,7 +381,17 @@ def top_usuarios_transacciones(db: Session, limit: int = 10, admin_id: int | Non
             (Transaccion.cuenta_origen_id == Cuenta.id)
             | (Transaccion.cuenta_destino_id == Cuenta.id),
         )
-        .group_by(Usuario.id, Usuario.nombre, Usuario.email)
+    )
+    if organizacion_id is not None:
+        # El ranking no debe mezclar actividad de otros tenants.
+        query = query.filter(
+            Usuario.organizacion_id == organizacion_id,
+            Cuenta.organizacion_id == organizacion_id,
+            Transaccion.organizacion_id == organizacion_id,
+        )
+
+    resultados = (
+        query.group_by(Usuario.id, Usuario.nombre, Usuario.email)
         .order_by(func.count(Transaccion.id).desc())
         .limit(limit)
         .all()

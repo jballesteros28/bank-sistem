@@ -11,6 +11,7 @@ from typing import Any
 
 from core.config import settings
 from core.dependencias import get_db
+from core.enums import RolUsuario
 from models.usuario import Usuario
 from schemas.auth import DatosUsuarioToken
 from services.log_service import guardar_log
@@ -22,6 +23,16 @@ from models.log import LogMongo
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
+def is_super_admin(current_user: DatosUsuarioToken) -> bool:
+    """Indica si el usuario autenticado tiene permisos globales SaaS."""
+    return current_user.rol == RolUsuario.SUPER_ADMIN.value
+
+
+def is_admin_or_super_admin(current_user: DatosUsuarioToken) -> bool:
+    """Centraliza la regla para rutas administrativas existentes."""
+    return current_user.rol in {RolUsuario.admin.value, RolUsuario.SUPER_ADMIN.value}
 
 
 # ==========================================================
@@ -152,10 +163,10 @@ async def get_current_admin(
     current_user: DatosUsuarioToken = Depends(get_current_user),
 ) -> DatosUsuarioToken:
     """
-    Permite solo acceso a usuarios con rol 'admin'.
+    Permite acceso a usuarios con rol 'admin' o 'super_admin'.
     Si no cumple, registra un log en Mongo y lanza 403.
     """
-    if current_user.rol != "admin":
+    if not is_admin_or_super_admin(current_user):
         log = LogMongo(
             evento="AccesoNoAutorizado",
             mensaje=f"Usuario {current_user.email} intentó acceder a una ruta administrativa.",
@@ -169,6 +180,30 @@ async def get_current_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso restringido a administradores",
+        )
+
+    return current_user
+
+
+async def get_current_super_admin(
+    request: Request,
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+) -> DatosUsuarioToken:
+    """Permite solo usuarios con rol global super_admin."""
+    if not is_super_admin(current_user):
+        log = LogMongo(
+            evento="AccesoNoAutorizado",
+            mensaje=f"Usuario {current_user.email} intento acceder a una ruta de super admin.",
+            nivel="WARNING",
+            usuario_id=current_user.id,
+            endpoint=str(request.url),
+            ip=request.client.host,
+        )
+        await guardar_log(log)
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso restringido a super administradores",
         )
 
     return current_user

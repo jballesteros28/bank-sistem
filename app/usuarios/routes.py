@@ -5,6 +5,8 @@ from core.seguridad import get_current_user
 from schemas.auth import DatosUsuarioToken
 from services.usuario_service import obtener_usuario_actual
 from core.dependencias import get_db
+from dependencies.organizacion_dependencies import get_current_organizacion
+from models.organizacion import Organizacion
 
 # Crear el router del módulo de usuarios
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
@@ -15,6 +17,7 @@ def perfil_usuario_actual(
     request: Request,
     background_tasks: BackgroundTasks,
     usuario_token: DatosUsuarioToken = Depends(get_current_user),
+    organizacion: Organizacion = Depends(get_current_organizacion),
     db: Session = Depends(get_db)
 ):
     """

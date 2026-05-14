@@ -65,7 +65,7 @@ def upgrade() -> None:
                 :id,
                 'Organización Demo',
                 'organizacion-demo',
-                'demo@wallet.local',
+                'demo@example.com',
                 'activa',
                 CURRENT_TIMESTAMP
             )

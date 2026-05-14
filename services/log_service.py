@@ -28,7 +28,8 @@ async def guardar_log(log: LogMongo) -> Optional[str]:
 async def obtener_logs(
     evento: Optional[str] = None,
     nivel: Optional[str] = None,
-    correlation_id: Optional[str] = None
+    correlation_id: Optional[str] = None,
+    usuario_ids: Optional[list[int]] = None,
 ) -> List[dict[Any, Any]]:
     coleccion = get_logs_collection()
 
@@ -37,6 +38,9 @@ async def obtener_logs(
         query["evento"] = evento
     if nivel:
         query["nivel"] = nivel
+    if usuario_ids is not None:
+        # Admins comunes solo ven logs de usuarios de su organizacion.
+        query["usuario_id"] = {"$in": usuario_ids}
     if correlation_id:
         query["correlation_id"] = correlation_id
     else:

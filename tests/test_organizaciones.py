@@ -13,7 +13,7 @@ from models.organizacion import Organizacion
 from models.usuario import Usuario
 
 
-SEED_ADMIN_EMAIL = "admin@sistemabancario.com"
+SEED_ADMIN_EMAIL = "superadmin@sistemabancario.com"
 
 
 def _token_para_usuario(email: str) -> str:

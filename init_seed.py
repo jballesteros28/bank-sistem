@@ -90,6 +90,13 @@ def init_seed() -> None:
             rol=RolUsuario.admin,
             organizacion=organizacion,
         )
+        super_admin = _obtener_o_crear_usuario(
+            db,
+            nombre="Super Administrador",
+            email="superadmin@sistemabancario.com",
+            rol=RolUsuario.SUPER_ADMIN,
+            organizacion=organizacion,
+        )
         emisor = _obtener_o_crear_usuario(
             db,
             nombre="Usuario Emisor",
@@ -122,8 +129,9 @@ def init_seed() -> None:
             organizacion=organizacion,
         )
 
-        # El admin no necesita cuenta para las pruebas actuales, pero queda asociado al tenant.
+        # Admin y super_admin no necesitan cuenta, pero quedan asociados al tenant demo.
         db.add(admin)
+        db.add(super_admin)
         db.commit()
     finally:
         db.close()

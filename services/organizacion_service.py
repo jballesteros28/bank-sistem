@@ -12,7 +12,7 @@ from schemas.organizacion_schema import OrganizacionCreate, OrganizacionUpdate
 
 ORGANIZACION_DEMO_NOMBRE = "Organización Demo"
 ORGANIZACION_DEMO_SLUG = "organizacion-demo"
-ORGANIZACION_DEMO_EMAIL = "demo@wallet.local"
+ORGANIZACION_DEMO_EMAIL = "demo@example.com"
 
 
 def _normalizar_slug(slug: str) -> str:
@@ -27,6 +27,10 @@ def obtener_o_crear_organizacion_demo(db: Session) -> Organizacion:
     """Garantiza una organizacion base para desarrollo y datos heredados."""
     organizacion = _buscar_organizacion_por_slug(db, ORGANIZACION_DEMO_SLUG)
     if organizacion:
+        if organizacion.email_contacto != ORGANIZACION_DEMO_EMAIL:
+            # Mantiene seeds existentes alineados con el dominio demo actual.
+            organizacion.email_contacto = ORGANIZACION_DEMO_EMAIL
+            db.add(organizacion)
         return organizacion
 
     organizacion = Organizacion(

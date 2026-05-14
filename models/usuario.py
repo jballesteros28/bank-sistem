@@ -31,7 +31,13 @@ class Usuario(Base):
 
     # 👤 Rol del usuario (cliente, admin, soporte)
     rol: Mapped[RolUsuario] = mapped_column(
-        PgEnum(RolUsuario, name="rolusuario", create_constraint=False),
+        PgEnum(
+            RolUsuario,
+            name="rolusuario",
+            # SUPER_ADMIN es el nombre Python, pero la DB guarda "super_admin".
+            values_callable=lambda enum_cls: [rol.value for rol in enum_cls],
+            create_constraint=False,
+        ),
         default=RolUsuario.cliente,
         nullable=False
     )

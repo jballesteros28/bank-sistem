@@ -11,7 +11,7 @@ from core.enums import EstadoCuenta
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 import random
-from services.organizacion_service import obtener_o_crear_organizacion_demo
+from uuid import UUID
 
 
 # ==========================================================
@@ -31,24 +31,24 @@ def generar_numero_cuenta(db: Session) -> str:
 def crear_cuenta(
     cuenta_datos: CuentaCreate,
     usuario_id: int,
+    organizacion_id: UUID,
     db: Session,
     background_tasks: BackgroundTasks,
     request: Optional[Request] = None
 ) -> CuentaOut:
     """Crea una nueva cuenta bancaria y envía correo de confirmación."""
-    titular = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    titular = db.query(Usuario).filter(
+        Usuario.id == usuario_id,
+        Usuario.organizacion_id == organizacion_id,
+    ).first()
     if not titular:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuario no encontrado.",
         )
-    if titular.organizacion_id is None:
-        # Los usuarios heredados se asignan a la organizacion demo al crear su primera cuenta nueva.
-        titular.organizacion_id = obtener_o_crear_organizacion_demo(db).id
-        db.add(titular)
-
     cuenta_existente = db.query(Cuenta).filter(
         Cuenta.usuario_id == usuario_id,
+        Cuenta.organizacion_id == organizacion_id,
         Cuenta.tipo == cuenta_datos.tipo,
         Cuenta.estado != EstadoCuenta.inactiva,
     ).first()
@@ -65,7 +65,8 @@ def crear_cuenta(
         saldo=Decimal("0.00"),
         estado=EstadoCuenta.activa,
         usuario_id=usuario_id,
-        organizacion_id=titular.organizacion_id,
+        # La organizacion siempre sale del usuario autenticado, nunca del frontend.
+        organizacion_id=organizacion_id,
     )
     db.add(nueva_cuenta)
     db.commit()
@@ -123,12 +124,16 @@ def crear_cuenta(
 # ==========================================================
 def obtener_cuentas_usuario(
     usuario_id: int,
+    organizacion_id: UUID,
     db: Session,
     background_tasks: Optional[BackgroundTasks] = None,
     request: Optional[Request] = None
 ) -> List[CuentaOut]:
     """Devuelve todas las cuentas de un usuario."""
-    cuentas = db.query(Cuenta).filter(Cuenta.usuario_id == usuario_id).all()
+    cuentas = db.query(Cuenta).filter(
+        Cuenta.usuario_id == usuario_id,
+        Cuenta.organizacion_id == organizacion_id,
+    ).all()
 
     if not cuentas:
         # 🔸 Log de advertencia si no tiene cuentas
@@ -157,6 +162,7 @@ def obtener_cuentas_usuario(
 def obtener_cuenta_por_id(
     cuenta_id: int,
     usuario_id: int,
+    organizacion_id: UUID,
     db: Session,
     background_tasks: Optional[BackgroundTasks] = None,
     request: Optional[Request] = None
@@ -165,6 +171,7 @@ def obtener_cuenta_por_id(
     cuenta = db.query(Cuenta).filter(
         Cuenta.id == cuenta_id,
         Cuenta.usuario_id == usuario_id,
+        Cuenta.organizacion_id == organizacion_id,
     ).first()
 
     if not cuenta:
@@ -195,12 +202,17 @@ def actualizar_saldo_cuenta(
     nuevo_saldo: Decimal,
     db: Session,
     usuario_id: Optional[int] = None,
+    organizacion_id: UUID | None = None,
     endpoint: str = "/admin/cuentas/{id}/saldo",
     background_tasks: Optional[BackgroundTasks] = None,
     request: Optional[Request] = None
 ) -> CuentaOut:
     """Actualiza el saldo de una cuenta (uso administrativo)."""
-    cuenta = db.query(Cuenta).filter(Cuenta.id == cuenta_id).first()
+    cuenta_query = db.query(Cuenta).filter(Cuenta.id == cuenta_id)
+    if organizacion_id is not None:
+        # Los admins comunes solo pueden operar cuentas de su propia organizacion.
+        cuenta_query = cuenta_query.filter(Cuenta.organizacion_id == organizacion_id)
+    cuenta = cuenta_query.first()
 
     if not cuenta:
         raise HTTPException(status_code=404, detail="Cuenta no encontrada.")

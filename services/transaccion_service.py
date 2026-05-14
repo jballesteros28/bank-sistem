@@ -4,6 +4,7 @@ from fastapi import HTTPException, status, Request, BackgroundTasks
 from datetime import datetime
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
+from uuid import UUID
 
 from models.transaccion import Transaccion
 from models.cuenta import Cuenta
@@ -13,7 +14,6 @@ from core.enums import EstadoCuenta
 from core.excepciones import SaldoInsuficienteError, respuesta_error_estandar
 from services.log_service import guardar_log
 from models.log import LogMongo
-from services.organizacion_service import obtener_o_crear_organizacion_demo
 
 # 📧 Enviadores especializados
 from services.enviadores_email.transferencia_exitosa import enviar_email_transferencia_exitosa
@@ -52,6 +52,7 @@ async def manejar_saldo_insuficiente(request: Request, exc: SaldoInsuficienteErr
 def realizar_transferencia(
     usuario_id: int,
     cuenta_origen_id: int,
+    organizacion_id: UUID,
     datos_transaccion: TransaccionCreate,
     db: Session,
     background_tasks: Optional[BackgroundTasks],
@@ -69,7 +70,11 @@ def realizar_transferencia(
     # 🔍 1. Obtener y bloquear cuenta origen
     cuenta_origen: Optional[Cuenta] = (
         db.query(Cuenta)
-        .filter(Cuenta.id == cuenta_origen_id, Cuenta.usuario_id == usuario_id)
+        .filter(
+            Cuenta.id == cuenta_origen_id,
+            Cuenta.usuario_id == usuario_id,
+            Cuenta.organizacion_id == organizacion_id,
+        )
         .with_for_update()
         .first()
     )
@@ -112,6 +117,13 @@ def realizar_transferencia(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cuenta destino no encontrada.",
+        )
+
+    if cuenta_destino.organizacion_id != organizacion_id:
+        # Fase 2: las transferencias entre organizaciones no estan permitidas.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No se permiten transferencias entre organizaciones.",
         )
 
     if cuenta_origen.id == cuenta_destino.id:
@@ -162,15 +174,6 @@ def realizar_transferencia(
         raise SaldoInsuficienteError("El saldo de la cuenta origen no es suficiente.")
 
     # 🧾 6. Registrar transacción
-    organizacion_id = cuenta_origen.organizacion_id or cuenta_destino.organizacion_id
-    if organizacion_id is None:
-        # Las cuentas historicas sin organizacion se enlazan a la organizacion demo.
-        organizacion_id = obtener_o_crear_organizacion_demo(db).id
-    if cuenta_origen.organizacion_id is None:
-        cuenta_origen.organizacion_id = organizacion_id
-    if cuenta_destino.organizacion_id is None:
-        cuenta_destino.organizacion_id = organizacion_id
-
     nueva_transaccion = Transaccion(
         cuenta_origen_id=cuenta_origen.id,
         cuenta_destino_id=cuenta_destino.id,
@@ -272,6 +275,7 @@ def realizar_transferencia(
 # ==========================================================
 def obtener_historial_usuario(
     usuario_id: int,
+    organizacion_id: UUID,
     db: Session,
     skip: int = 0,
     limit: int = 50,
@@ -282,11 +286,15 @@ def obtener_historial_usuario(
     - Ordenadas por fecha descendente.
     - Permite paginación opcional.
     """
-    cuentas_usuario = db.query(Cuenta.id).filter(Cuenta.usuario_id == usuario_id).subquery()
+    cuentas_usuario = db.query(Cuenta.id).filter(
+        Cuenta.usuario_id == usuario_id,
+        Cuenta.organizacion_id == organizacion_id,
+    ).subquery()
 
     transacciones: List[Transaccion] = (
         db.query(Transaccion)
         .filter(
+            Transaccion.organizacion_id == organizacion_id,
             or_(
                 Transaccion.cuenta_origen_id.in_(cuentas_usuario),
                 Transaccion.cuenta_destino_id.in_(cuentas_usuario),

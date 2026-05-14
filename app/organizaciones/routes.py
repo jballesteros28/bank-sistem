@@ -1,10 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.dependencias import get_db
-from core.seguridad import get_current_admin
+from core.enums import RolUsuario
+from core.seguridad import get_current_super_admin, get_current_user, is_super_admin
+from dependencies.organizacion_dependencies import get_current_organizacion
+from models.organizacion import Organizacion
 from schemas.auth import DatosUsuarioToken
 from schemas.organizacion_schema import (
     OrganizacionCreate,
@@ -18,6 +21,7 @@ from services.organizacion_service import (
     obtener_organizacion_por_id,
 )
 
+
 router = APIRouter(prefix="/organizaciones", tags=["Organizaciones"])
 
 
@@ -25,9 +29,9 @@ router = APIRouter(prefix="/organizaciones", tags=["Organizaciones"])
 def crear_nueva_organizacion(
     datos: OrganizacionCreate,
     db: Session = Depends(get_db),
-    _: DatosUsuarioToken = Depends(get_current_admin),
+    _: DatosUsuarioToken = Depends(get_current_super_admin),
 ) -> OrganizacionResponse:
-    # Primer endpoint administrativo para dar de alta tenants SaaS.
+    """Solo super_admin puede dar de alta organizaciones."""
     return OrganizacionResponse.model_validate(crear_organizacion(datos, db))
 
 
@@ -36,8 +40,9 @@ def obtener_organizaciones(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: DatosUsuarioToken = Depends(get_current_admin),
+    _: DatosUsuarioToken = Depends(get_current_super_admin),
 ) -> list[OrganizacionResponse]:
+    """Solo super_admin puede listar tenants."""
     organizaciones = listar_organizaciones(db, skip=skip, limit=limit)
     return [OrganizacionResponse.model_validate(org) for org in organizaciones]
 
@@ -46,8 +51,14 @@ def obtener_organizaciones(
 def obtener_organizacion(
     organizacion_id: UUID,
     db: Session = Depends(get_db),
-    _: DatosUsuarioToken = Depends(get_current_admin),
+    usuario: DatosUsuarioToken = Depends(get_current_user),
+    organizacion_actual: Organizacion = Depends(get_current_organizacion),
 ) -> OrganizacionResponse:
+    """Super admin ve cualquiera; admin comun solo su propia organizacion."""
+    if not is_super_admin(usuario):
+        if usuario.rol != RolUsuario.admin.value or organizacion_actual.id != organizacion_id:
+            raise HTTPException(status_code=403, detail="Organizacion fuera de alcance.")
+
     return OrganizacionResponse.model_validate(obtener_organizacion_por_id(organizacion_id, db))
 
 
@@ -60,8 +71,8 @@ def actualizar_estado_organizacion(
     organizacion_id: UUID,
     datos: OrganizacionEstadoUpdate,
     db: Session = Depends(get_db),
-    _: DatosUsuarioToken = Depends(get_current_admin),
+    _: DatosUsuarioToken = Depends(get_current_super_admin),
 ) -> OrganizacionResponse:
-    # El cambio de estado queda aislado para futura auditoria y permisos finos.
+    """Solo super_admin puede suspender, inactivar o reactivar organizaciones."""
     organizacion = cambiar_estado_organizacion(organizacion_id, datos.estado, db)
     return OrganizacionResponse.model_validate(organizacion)

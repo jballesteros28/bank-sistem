@@ -6,6 +6,7 @@ class RolUsuario(StrEnum):
     cliente = "cliente"
     admin = "admin"
     soporte = "soporte"
+    SUPER_ADMIN = "super_admin"
 
 # 💳 Tipos de cuenta bancaria
 class TipoCuenta(StrEnum):

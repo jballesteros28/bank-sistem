@@ -75,6 +75,7 @@ def _match_base(
     *,
     eventos: Optional[List[str]] = None,
     usuario_id: Optional[int] = None,
+    usuario_ids: Optional[List[int]] = None,
     nivel: Optional[str] = None,
     desde: Optional[datetime] = None,
     hasta: Optional[datetime] = None,
@@ -85,6 +86,9 @@ def _match_base(
         match["evento"] = {"$in": eventos}
     if usuario_id is not None:
         match["usuario_id"] = usuario_id
+    elif usuario_ids is not None:
+        # Permite acotar agregaciones a los usuarios visibles de una organizacion.
+        match["usuario_id"] = {"$in": usuario_ids}
     if nivel:
         match["nivel"] = nivel
     match.update(_filtro_fecha(desde, hasta))
@@ -120,10 +124,17 @@ def _pipeline_conteo_por_dia(match: Dict[str, Any]) -> List[Dict[str, Any]]:
 # 📊 Servicios de resumen de logs
 # ─────────────────────────────────────────────────────────────
 async def resumen_transacciones(*, db: AsyncIOMotorDatabase[Any] = mongo_db,
-    desde: Optional[datetime] = None, hasta: Optional[datetime] = None, usuario_id: Optional[int] = None) -> ResumenTransacciones:
+    desde: Optional[datetime] = None, hasta: Optional[datetime] = None,
+    usuario_id: Optional[int] = None, usuario_ids: Optional[List[int]] = None) -> ResumenTransacciones:
 
     eventos_interes = ["TransferenciaExitosa", "TransferenciaFallida", "TransferenciaSaldoInsuficiente"]
-    match = _match_base(eventos=eventos_interes, usuario_id=usuario_id, desde=desde, hasta=hasta)
+    match = _match_base(
+        eventos=eventos_interes,
+        usuario_id=usuario_id,
+        usuario_ids=usuario_ids,
+        desde=desde,
+        hasta=hasta,
+    )
 
     por_evento = await db[COL_LOGS].aggregate(_pipeline_conteo_por_clave(match, clave="$evento")).to_list(length=None)
     por_dia = await db[COL_LOGS].aggregate(_pipeline_conteo_por_dia(match)).to_list(length=None)
@@ -152,23 +163,37 @@ async def resumen_correos(*, db: AsyncIOMotorDatabase[Any] = mongo_db,
 
 
 async def resumen_niveles(*, db: AsyncIOMotorDatabase[Any] = mongo_db,
-    desde: Optional[datetime] = None, hasta: Optional[datetime] = None, usuario_id: Optional[int] = None) -> ResumenNiveles:
+    desde: Optional[datetime] = None, hasta: Optional[datetime] = None,
+    usuario_id: Optional[int] = None, usuario_ids: Optional[List[int]] = None) -> ResumenNiveles:
 
-    match = _match_base(desde=desde, hasta=hasta, usuario_id=usuario_id)
+    match = _match_base(desde=desde, hasta=hasta, usuario_id=usuario_id, usuario_ids=usuario_ids)
     por_nivel = await db[COL_LOGS].aggregate(_pipeline_conteo_por_clave(match, clave="$nivel")).to_list(length=None)
     return {"por_nivel": por_nivel}
 
 
 async def resumen_general(*, db: AsyncIOMotorDatabase[Any] = mongo_db,
     desde: Optional[datetime] = None, hasta: Optional[datetime] = None,
-    usuario_id: Optional[int] = None, incluir_correos: bool = True, incluir_niveles: bool = True) -> ResumenGeneral:
+    usuario_id: Optional[int] = None, usuario_ids: Optional[List[int]] = None,
+    incluir_correos: bool = True, incluir_niveles: bool = True) -> ResumenGeneral:
 
     resultado: ResumenGeneral = {}
-    resultado["transacciones"] = await resumen_transacciones(db=db, desde=desde, hasta=hasta, usuario_id=usuario_id)
+    resultado["transacciones"] = await resumen_transacciones(
+        db=db,
+        desde=desde,
+        hasta=hasta,
+        usuario_id=usuario_id,
+        usuario_ids=usuario_ids,
+    )
     if incluir_correos:
         resultado["correos"] = await resumen_correos(db=db, desde=desde, hasta=hasta)
     if incluir_niveles:
-        resultado["niveles"] = await resumen_niveles(db=db, desde=desde, hasta=hasta, usuario_id=usuario_id)
+        resultado["niveles"] = await resumen_niveles(
+            db=db,
+            desde=desde,
+            hasta=hasta,
+            usuario_id=usuario_id,
+            usuario_ids=usuario_ids,
+        )
     return resultado
 
 
@@ -177,7 +202,9 @@ async def resumen_general(*, db: AsyncIOMotorDatabase[Any] = mongo_db,
 # ─────────────────────────────────────────────────────────────
 async def resumen_dashboard(
     *, db: AsyncIOMotorDatabase[Any] = mongo_db,
-    desde: Optional[datetime] = None, hasta: Optional[datetime] = None
+    desde: Optional[datetime] = None, hasta: Optional[datetime] = None,
+    usuario_ids: Optional[List[int]] = None,
+    incluir_correos: bool = True,
 ) -> Dict[str, Any]:
     """
     Devuelve los datos listos para graficar en el dashboard React:
@@ -185,7 +212,13 @@ async def resumen_dashboard(
     - correos_chart → torta de estados y top templates
     - transacciones_chart → línea temporal diaria
     """
-    data = await resumen_general(db=db, desde=desde, hasta=hasta)
+    data = await resumen_general(
+        db=db,
+        desde=desde,
+        hasta=hasta,
+        usuario_ids=usuario_ids,
+        incluir_correos=incluir_correos,
+    )
 
     def formatear_para_chart(lista: List[Dict[str, Any]]) -> Dict[str, List[Any]]:
         return {
@@ -195,6 +228,6 @@ async def resumen_dashboard(
 
     return {
         "niveles_chart": formatear_para_chart(data["niveles"]["por_nivel"]),
-        "correos_chart": formatear_para_chart(data["correos"]["top_templates"]),
+        "correos_chart": formatear_para_chart(data.get("correos", {"top_templates": []})["top_templates"]),
         "transacciones_chart": formatear_para_chart(data["transacciones"]["por_dia"]),
     }
