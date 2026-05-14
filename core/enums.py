@@ -29,12 +29,20 @@ class TipoTransaccion(StrEnum):
     transferencia = "transferencia"
     deposito = "deposito"
     retiro = "retiro"
+    pago = "pago"
+    cashback = "cashback"
+    ajuste_admin = "ajuste_admin"
+    reversa = "reversa"
 
 # ⏳ Estados posibles de una transacción
 class EstadoTransaccion(StrEnum):
     completada = "completada"
     fallida = "fallida"
     pendiente = "pendiente"
+    aprobada = "aprobada"
+    rechazada = "rechazada"
+    cancelada = "cancelada"
+    revertida = "revertida"
 
 # 📧 Tipos de notificación
 class TipoNotificacion(StrEnum):

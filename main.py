@@ -11,6 +11,7 @@ from app.usuarios import routes as usuarios_routes
 from app.cuentas import routes as cuentas_routes
 from app.wallets import routes as wallets_routes
 from app.transacciones import routes as transacciones_routes
+from app.movimientos import routes as movimientos_routes
 from app.organizaciones import routes as organizaciones_routes
 from app.admin import routes as admin_routes
 from app.admin import log_routes
@@ -133,6 +134,7 @@ app.include_router(usuarios_routes.router)
 app.include_router(cuentas_routes.router)
 app.include_router(wallets_routes.router)
 app.include_router(transacciones_routes.router)
+app.include_router(movimientos_routes.router)
 app.include_router(organizaciones_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(notificaciones_routes.router)

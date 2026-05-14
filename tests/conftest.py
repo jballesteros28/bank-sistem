@@ -46,6 +46,7 @@ def patch_background_tasks():
     import services.cuenta_service as cuenta_svc
     import services.email_service as email_svc
     import services.log_service as log_svc
+    import services.movimiento_service as movimiento_svc
     import services.reset_password_service as reset_svc
     import services.transaccion_service as transaccion_svc
     import core.seguridad as seguridad_svc
@@ -70,7 +71,7 @@ def patch_background_tasks():
                 setattr(svc, fn_name, _noop_async)
 
     # Neutralizar logs
-    for mod in (auth_svc, admin_svc, cuenta_svc, exc_mod, log_svc, reset_svc, seguridad_svc, transaccion_svc):
+    for mod in (auth_svc, admin_svc, cuenta_svc, exc_mod, log_svc, movimiento_svc, reset_svc, seguridad_svc, transaccion_svc):
         for fn_name in ("guardar_log", "guardar_log_correo"):
             if hasattr(mod, fn_name):
                 setattr(mod, fn_name, _noop_async)

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import NUMERIC, ForeignKey, String
+from sqlalchemy import Boolean, JSON, NUMERIC, ForeignKey, String
 # Tipos de columnas de SQLAlchemy
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum  # ENUM nativo de PostgreSQL
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -70,6 +70,18 @@ class Transaccion(Base):
     )
     
     descripcion: Mapped[str | None] = mapped_column(String, nullable=True)
+    referencia_externa: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+
+    # "metadata" es nombre reservado por SQLAlchemy Declarative; la columna real
+    # conserva ese nombre y el atributo ORM usa un alias seguro.
+    metadata_movimiento: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
+    movimiento_origen_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+    es_reversa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    motivo_reversa: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Organizacion donde se origina la transaccion. Nullable para migrar historico existente.
     organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
