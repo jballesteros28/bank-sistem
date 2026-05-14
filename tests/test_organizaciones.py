@@ -37,6 +37,12 @@ def _headers_admin() -> dict[str, str]:
     return {"Authorization": f"Bearer {_token_para_usuario(SEED_ADMIN_EMAIL)}"}
 
 
+def _data(response):
+    body = response.json()
+    assert body["success"] is True
+    return body["data"]
+
+
 def test_crear_organizacion_ok(client: TestClient) -> None:
     slug = f"org-{uuid4().hex[:8]}"
     payload = {
@@ -48,7 +54,7 @@ def test_crear_organizacion_ok(client: TestClient) -> None:
     r = client.post("/organizaciones", headers=_headers_admin(), json=payload)
 
     assert r.status_code == status.HTTP_201_CREATED, r.text
-    data = r.json()
+    data = _data(r)
     assert data["slug"] == slug
     assert data["estado"] == "activa"
 
@@ -73,7 +79,7 @@ def test_listar_organizaciones(client: TestClient) -> None:
     r = client.get("/organizaciones", headers=_headers_admin())
 
     assert r.status_code == status.HTTP_200_OK, r.text
-    data = r.json()
+    data = _data(r)
     assert isinstance(data, list)
     assert any(org["slug"] == "organizacion-demo" for org in data)
 
@@ -87,7 +93,7 @@ def test_cambiar_estado_organizacion(client: TestClient) -> None:
     }
     creada = client.post("/organizaciones", headers=_headers_admin(), json=payload)
     assert creada.status_code == status.HTTP_201_CREATED, creada.text
-    organizacion_id = creada.json()["id"]
+    organizacion_id = _data(creada)["id"]
 
     r = client.patch(
         f"/organizaciones/{organizacion_id}/estado",
@@ -96,7 +102,7 @@ def test_cambiar_estado_organizacion(client: TestClient) -> None:
     )
 
     assert r.status_code == status.HTTP_200_OK, r.text
-    assert r.json()["estado"] == "suspendida"
+    assert _data(r)["estado"] == "suspendida"
 
 
 def test_registro_usuario_asociado_a_organizacion_demo(client: TestClient) -> None:

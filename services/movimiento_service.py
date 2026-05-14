@@ -29,6 +29,7 @@ from services.log_service import guardar_log
 
 
 OPERADOR_ROLES = {
+    RolUsuario.owner.value,
     RolUsuario.admin.value,
     RolUsuario.soporte.value,
     RolUsuario.SUPER_ADMIN.value,

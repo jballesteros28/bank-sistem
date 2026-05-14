@@ -18,7 +18,7 @@ from services import reset_password_service
 from core.dependencias import get_db
 
 # ── Router ────────────────────────────────────
-router = APIRouter(prefix="/auth", tags=["Autenticación"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 # ══════════════════════════════════════════════

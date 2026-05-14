@@ -30,6 +30,12 @@ def _headers(usuario: Usuario) -> dict[str, str]:
     return {"Authorization": f"Bearer {_token(usuario)}"}
 
 
+def _data(response):
+    body = response.json()
+    assert body["success"] is True
+    return body["data"]
+
+
 def _organizacion_demo(db: Session) -> Organizacion:
     organizacion = db.query(Organizacion).filter_by(slug="organizacion-demo").first()
     assert organizacion is not None
@@ -104,7 +110,7 @@ def test_crear_wallet(client: TestClient, db_session: Session) -> None:
     )
 
     assert response.status_code == 201, response.text
-    data = response.json()
+    data = _data(response)
     assert data["alias"] == "Principal"
     assert data["tipo"] == "principal"
     assert data["estado"] == "activa"
@@ -120,7 +126,7 @@ def test_listar_wallets_del_usuario(client: TestClient, db_session: Session) -> 
     response = client.get("/wallets", headers=_headers(usuario))
 
     assert response.status_code == 200, response.text
-    data = response.json()
+    data = _data(response)
     assert len(data) == 2
     assert {wallet["usuario_id"] for wallet in data} == {usuario.id}
 
@@ -142,7 +148,7 @@ def test_obtener_balance_wallet(client: TestClient, db_session: Session) -> None
     response = client.get(f"/wallets/{wallet.id}/balance", headers=_headers(usuario))
 
     assert response.status_code == 200, response.text
-    assert response.json()["saldo"] == "42.50"
+    assert _data(response)["saldo"] == "42.50"
 
 
 def test_cambiar_estado_wallet(client: TestClient, db_session: Session) -> None:
@@ -156,7 +162,7 @@ def test_cambiar_estado_wallet(client: TestClient, db_session: Session) -> None:
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["estado"] == "congelada"
+    assert _data(response)["estado"] == "congelada"
 
 
 def test_congelar_wallet_bloquea_operacion(client: TestClient, db_session: Session) -> None:
@@ -191,7 +197,7 @@ def test_cerrar_wallet_con_saldo_cero(client: TestClient, db_session: Session) -
     response = client.patch(f"/wallets/{wallet.id}/cerrar", headers=_headers(usuario))
 
     assert response.status_code == 200, response.text
-    assert response.json()["estado"] == "cerrada"
+    assert _data(response)["estado"] == "cerrada"
 
 
 def test_no_cerrar_wallet_con_saldo_mayor_a_cero(client: TestClient, db_session: Session) -> None:
@@ -214,7 +220,7 @@ def test_crear_wallet_en_moneda_puntos(client: TestClient, db_session: Session) 
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["moneda"] == "PUNTOS"
+    assert _data(response)["moneda"] == "PUNTOS"
 
 
 def test_bloquear_transferencia_entre_wallets_de_distinta_moneda(

@@ -19,7 +19,7 @@ from services.log_summary_service import (
 )
 
 
-router = APIRouter(prefix="/admin/logs", tags=["Logs Administrativos"])
+router = APIRouter(prefix="/admin/logs", tags=["Auditoría / Logs"])
 
 
 def parse_datetime_or_none(valor: str | None) -> datetime | None:

@@ -31,8 +31,12 @@ def is_super_admin(current_user: DatosUsuarioToken) -> bool:
 
 
 def is_admin_or_super_admin(current_user: DatosUsuarioToken) -> bool:
-    """Centraliza la regla para rutas administrativas existentes."""
-    return current_user.rol in {RolUsuario.admin.value, RolUsuario.SUPER_ADMIN.value}
+    """Centraliza permisos administrativos de tenant y plataforma."""
+    return current_user.rol in {
+        RolUsuario.owner.value,
+        RolUsuario.admin.value,
+        RolUsuario.SUPER_ADMIN.value,
+    }
 
 
 # ==========================================================
@@ -163,7 +167,7 @@ async def get_current_admin(
     current_user: DatosUsuarioToken = Depends(get_current_user),
 ) -> DatosUsuarioToken:
     """
-    Permite acceso a usuarios con rol 'admin' o 'super_admin'.
+    Permite acceso a usuarios con rol 'owner', 'admin' o 'super_admin'.
     Si no cumple, registra un log en Mongo y lanza 403.
     """
     if not is_admin_or_super_admin(current_user):

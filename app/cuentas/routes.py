@@ -14,7 +14,7 @@ from services.cuenta_service import (
 from typing import List
 from core.dependencias import get_db
 
-router = APIRouter(prefix="/cuentas", tags=["Cuentas"])
+router = APIRouter(prefix="/cuentas", tags=["Legacy - Cuentas"], deprecated=True)
 
 
 # 🏦 Crear nueva cuenta bancaria

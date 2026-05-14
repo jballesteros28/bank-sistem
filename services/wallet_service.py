@@ -22,7 +22,11 @@ from services.cuenta_service import generar_numero_cuenta
 
 
 def _es_admin(usuario: DatosUsuarioToken) -> bool:
-    return usuario.rol in {RolUsuario.admin.value, RolUsuario.SUPER_ADMIN.value}
+    return usuario.rol in {
+        RolUsuario.owner.value,
+        RolUsuario.admin.value,
+        RolUsuario.SUPER_ADMIN.value,
+    }
 
 
 def _tipo_wallet_a_cuenta(tipo: TipoWallet) -> TipoCuenta:
@@ -312,4 +316,3 @@ def cerrar_wallet(
     db.commit()
     db.refresh(cuenta)
     return WalletResponse.model_validate(cuenta)
-

@@ -30,7 +30,7 @@ from services.cuenta_service import actualizar_saldo_cuenta
 from services.log_service import obtener_logs, obtener_logs_correos
 
 
-router = APIRouter(prefix="/admin", tags=["Administracion"])
+router = APIRouter(prefix="/admin", tags=["Administración"])
 
 
 def verificar_admin(usuario: DatosUsuarioToken) -> None:

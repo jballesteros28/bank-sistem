@@ -10,7 +10,7 @@ from schemas.transaccion import TransaccionCreate, TransaccionOut
 from services.transaccion_service import obtener_historial_usuario, realizar_transferencia
 
 
-router = APIRouter(prefix="/transacciones", tags=["Transacciones"])
+router = APIRouter(prefix="/transacciones", tags=["Legacy - Transacciones"], deprecated=True)
 
 
 @router.post("/", response_model=TransaccionOut, status_code=status.HTTP_201_CREATED)

@@ -5,6 +5,7 @@ from enum import StrEnum
 class RolUsuario(StrEnum):
     cliente = "cliente"
     admin = "admin"
+    owner = "owner"
     soporte = "soporte"
     SUPER_ADMIN = "super_admin"
 

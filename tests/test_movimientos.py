@@ -30,6 +30,12 @@ def _headers(usuario: Usuario) -> dict[str, str]:
     return {"Authorization": f"Bearer {_token(usuario)}"}
 
 
+def _data(response):
+    body = response.json()
+    assert body["success"] is True
+    return body["data"]
+
+
 def _crear_organizacion(db: Session) -> Organizacion:
     sufijo = uuid4().hex[:10]
     organizacion = Organizacion(
@@ -87,7 +93,7 @@ def _crear_wallet(
 def _balance(client: TestClient, headers: dict[str, str], wallet_id: int) -> Decimal:
     response = client.get(f"/wallets/{wallet_id}/balance", headers=headers)
     assert response.status_code == 200, response.text
-    return Decimal(response.json()["saldo"])
+    return Decimal(_data(response)["saldo"])
 
 
 def test_deposito_admin_aumenta_saldo(client: TestClient, db_session: Session) -> None:
@@ -104,7 +110,7 @@ def test_deposito_admin_aumenta_saldo(client: TestClient, db_session: Session) -
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["tipo"] == "deposito"
+    assert _data(response)["tipo"] == "deposito"
     assert _balance(client, headers, wallet.id) == Decimal("35.00")
 
 
@@ -190,7 +196,7 @@ def test_pago_mueve_saldo_correctamente(client: TestClient, db_session: Session)
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["tipo"] == "pago"
+    assert _data(response)["tipo"] == "pago"
     assert _balance(client, headers, origen.id) == Decimal("75.00")
 
 
@@ -208,7 +214,7 @@ def test_cashback_acredita_saldo(client: TestClient, db_session: Session) -> Non
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["tipo"] == "cashback"
+    assert _data(response)["tipo"] == "cashback"
     assert _balance(client, headers, wallet.id) == Decimal("10.00")
 
 
@@ -278,7 +284,7 @@ def test_reversa_de_transferencia_vuelve_saldos(client: TestClient, db_session: 
         json={"wallet_origen_id": origen.id, "wallet_destino_id": destino.id, "monto": "30.00"},
     )
     assert transferencia.status_code == 201, transferencia.text
-    movimiento_id = transferencia.json()["id"]
+    movimiento_id = _data(transferencia)["id"]
 
     reversa = client.post(
         f"/movimientos/{movimiento_id}/reversa",
@@ -287,7 +293,7 @@ def test_reversa_de_transferencia_vuelve_saldos(client: TestClient, db_session: 
     )
 
     assert reversa.status_code == 201, reversa.text
-    assert reversa.json()["tipo"] == "reversa"
+    assert _data(reversa)["tipo"] == "reversa"
     assert _balance(client, admin_headers, origen.id) == Decimal("100.00")
     assert _balance(client, admin_headers, destino.id) == Decimal("20.00")
 
@@ -306,7 +312,7 @@ def test_no_se_puede_revertir_dos_veces(client: TestClient, db_session: Session)
         headers=_headers(emisor),
         json={"wallet_origen_id": origen.id, "wallet_destino_id": destino.id, "monto": "10.00"},
     )
-    movimiento_id = transferencia.json()["id"]
+    movimiento_id = _data(transferencia)["id"]
 
     primera = client.post(
         f"/movimientos/{movimiento_id}/reversa",
@@ -421,6 +427,6 @@ def test_get_movimientos_lista_solo_organizacion_actual(client: TestClient, db_s
     response = client.get("/movimientos", headers=headers_a)
 
     assert response.status_code == 200, response.text
-    ids = {movimiento["id"] for movimiento in response.json()}
-    assert mov_a.json()["id"] in ids
-    assert mov_b.json()["id"] not in ids
+    ids = {movimiento["id"] for movimiento in _data(response)}
+    assert _data(mov_a)["id"] in ids
+    assert _data(mov_b)["id"] not in ids

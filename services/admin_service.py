@@ -13,7 +13,7 @@ from schemas.transaccion import TransaccionOut
 from models.cuenta import Cuenta
 from models.usuario import Usuario
 from models.transaccion import Transaccion
-from core.enums import EstadoCuenta
+from core.enums import EstadoCuenta, RolUsuario
 from models.log import LogMongo
 
 # 📦 Servicios auxiliares
@@ -82,6 +82,11 @@ def cambiar_rol_usuario(
     usuario: Usuario | None = usuario_query.first()
     if not usuario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    if organizacion_id is not None and usuario.rol == RolUsuario.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No se puede modificar un super_admin desde permisos de organizacion.",
+        )
 
     rol_anterior = usuario.rol
     usuario.rol = datos.nuevo_rol

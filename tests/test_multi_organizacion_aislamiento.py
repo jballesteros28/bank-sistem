@@ -205,7 +205,9 @@ def test_super_admin_puede_listar_organizaciones(client: TestClient, db_session:
     r = client.get("/organizaciones", headers=_headers(super_admin))
 
     assert r.status_code == status.HTTP_200_OK, r.text
-    slugs = {org["slug"] for org in r.json()}
+    body = r.json()
+    assert body["success"] is True
+    slugs = {org["slug"] for org in body["data"]}
     assert org_a.slug in slugs
     assert org_b.slug in slugs
 
