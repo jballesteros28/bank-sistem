@@ -1,0 +1,2 @@
+"""Notificaciones app."""
+

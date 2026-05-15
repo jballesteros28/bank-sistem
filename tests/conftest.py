@@ -1,98 +1,49 @@
-# tests/conftest.py
+from __future__ import annotations
+
 import os
+from collections.abc import Generator
+from decimal import Decimal
+from uuid import uuid4
+
 import pytest
-import pytest_asyncio
-import asyncio
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
-from main import app
-from database.db_postgres import Base
-from core.dependencias import get_db
-from init_seed import init_seed
-from core.config import settings
-import motor.motor_asyncio
+os.environ["APP_NAME"] = "Wallet SaaS API"
+os.environ["ENVIRONMENT"] = "test"
+os.environ["DATABASE_URL"] = "sqlite+pysqlite:///./wallet_saas_test.db"
+os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["ALGORITHM"] = "HS256"
+os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "60"
 
-# ================================
-# 🔧 Configuración DB de test
-# ================================
-TEST_DATABASE_URL = (
-    f"postgresql+psycopg2://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}"
-    f"@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
-)
-
-engine_test = create_engine(TEST_DATABASE_URL, future=True)
-TestingSessionLocal = sessionmaker(bind=engine_test, autocommit=False, autoflush=False)
+from app.apps.organizaciones.models import Organizacion
+from app.apps.usuarios.models import Usuario
+from app.apps.wallets.models import Wallet
+from app.core.database import Base, assert_test_database_url, get_db
+from app.core.security import create_access_token, hash_password
+from app.main import app
+from app.shared.enums import EstadoOrganizacion, EstadoWallet, MonedaWallet, RolUsuario, TipoWallet
 
 
-# ================================
-# 🚫 Neutralizar background tasks y logs
-# ================================
-async def _noop_async(*args, **kwargs):
-    """Función vacía que reemplaza tareas externas (emails/logs)."""
-    return None
+TEST_DATABASE_URL = os.environ["DATABASE_URL"]
+assert_test_database_url(TEST_DATABASE_URL)
+
+engine_test = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False}, future=True)
+TestingSessionLocal = sessionmaker(bind=engine_test, autoflush=False, autocommit=False, future=True)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def patch_background_tasks():
-    """
-    Reemplaza globalmente los enviadores de correo y el guardado de logs
-    para evitar dependencias externas (SMTP, Mongo) durante los tests.
-    """
-    import services.auth_service as auth_svc
-    import services.admin_service as admin_svc
-    import services.cuenta_service as cuenta_svc
-    import services.email_service as email_svc
-    import services.log_service as log_svc
-    import services.movimiento_service as movimiento_svc
-    import services.reset_password_service as reset_svc
-    import services.transaccion_service as transaccion_svc
-    import core.seguridad as seguridad_svc
-    import services.enviadores_email.reset_password as reset_mail
-    import core.excepciones as exc_mod
-
-    # Neutralizar enviadores de correo
-    for svc in (auth_svc, admin_svc, cuenta_svc, email_svc, reset_mail, transaccion_svc):
-        for fn_name in (
-            "enviar_email_bienvenida",
-            "enviar_email_actividad_sospechosa",
-            "enviar_email_ajuste_saldo",
-            "enviar_email_cambio_rol",
-            "enviar_email_cuenta_congelada",
-            "enviar_email_cuenta_creada",
-            "enviar_email_reset_password",
-            "enviar_email_transferencia_exitosa",
-            "enviar_email_transferencia_recibida",
-            "enviar_email",
-        ):
-            if hasattr(svc, fn_name):
-                setattr(svc, fn_name, _noop_async)
-
-    # Neutralizar logs
-    for mod in (auth_svc, admin_svc, cuenta_svc, exc_mod, log_svc, movimiento_svc, reset_svc, seguridad_svc, transaccion_svc):
-        for fn_name in ("guardar_log", "guardar_log_correo"):
-            if hasattr(mod, fn_name):
-                setattr(mod, fn_name, _noop_async)
-
-
-# ================================
-# 📌 Fixture DB PostgreSQL
-# ================================
-@pytest.fixture(scope="session", autouse=True)
-def setup_database():
-    """Crea la base de datos limpia y carga la semilla inicial."""
+@pytest.fixture(autouse=True)
+def setup_database() -> Generator[None, None, None]:
+    assert_test_database_url(TEST_DATABASE_URL)
     Base.metadata.drop_all(bind=engine_test)
     Base.metadata.create_all(bind=engine_test)
-    init_seed()  # 🌱 poblar DB con admin, emisor, receptor y cuentas
     yield
     Base.metadata.drop_all(bind=engine_test)
 
 
 @pytest.fixture()
-def db_session():
-    """Provee una sesión nueva para cada test."""
+def db_session() -> Generator[Session, None, None]:
     session = TestingSessionLocal()
     try:
         yield session
@@ -100,62 +51,104 @@ def db_session():
         session.close()
 
 
-# ================================
-# 📌 Cliente síncrono (usado en tests HTTP clásicos)
-# ================================
 @pytest.fixture()
-def client(db_session):
-    """Sobrescribe get_db con la sesión de test (cliente síncrono)."""
-
-    def override_get_db():
+def client() -> Generator[TestClient, None, None]:
+    def override_get_db() -> Generator[Session, None, None]:
+        db = TestingSessionLocal()
         try:
-            yield db_session
+            yield db
         finally:
-            db_session.close()
+            db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
-# ================================
-# ⚙️ Cliente asíncrono (para tests con Motor / async endpoints)
-# ================================
-_mongo_client: motor.motor_asyncio.AsyncIOMotorClient | None = None
+def api_data(response):
+    body = response.json()
+    assert body["success"] is True
+    return body["data"]
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> asyncio.AbstractEventLoop:
-    """Loop persistente para toda la sesión de tests (evita RuntimeError: loop closed)."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.run_until_complete(_close_mongo_client())
-    loop.close()
+def auth_headers(usuario: Usuario) -> dict[str, str]:
+    token = create_access_token({"sub": str(usuario.id), "email": usuario.email, "rol": usuario.rol.value})
+    return {"Authorization": f"Bearer {token}"}
 
 
-async def _close_mongo_client() -> None:
-    """Cierra el cliente global de MongoDB si existe."""
-    global _mongo_client
-    if _mongo_client is not None:
-        _mongo_client.close()
-        _mongo_client = None
+def create_org(db: Session, slug: str | None = None) -> Organizacion:
+    suffix = uuid4().hex[:8]
+    org = Organizacion(
+        nombre=f"Org {suffix}",
+        slug=slug or f"org-{suffix}",
+        email_contacto=f"contacto-{suffix}@example.com",
+        estado=EstadoOrganizacion.activa,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def init_mongo_client() -> None:
-    """Inicializa y mantiene el cliente global de MongoDB."""
-    global _mongo_client
-    if _mongo_client is None:
-        _mongo_client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_URI)
+def create_user(
+    db: Session,
+    org: Organizacion | None,
+    role: RolUsuario = RolUsuario.cliente,
+    password: str = "Password123!",
+) -> Usuario:
+    suffix = uuid4().hex[:8]
+    user = Usuario(
+        nombre=f"Usuario {suffix}",
+        email=f"user-{suffix}@example.com",
+        hashed_password=hash_password(password),
+        rol=role,
+        es_activo=True,
+        organizacion_id=org.id if org else None,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
-@pytest_asyncio.fixture(scope="session")
-async def async_client() -> AsyncClient:
-    """Cliente HTTP asíncrono reutilizable para tests (compatible con httpx>=0.28)."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+def create_wallet(
+    db: Session,
+    user: Usuario,
+    *,
+    saldo: Decimal = Decimal("0.00"),
+    moneda: MonedaWallet = MonedaWallet.ARS,
+    estado: EstadoWallet = EstadoWallet.activa,
+    es_principal: bool = False,
+) -> Wallet:
+    wallet = Wallet(
+        alias=f"Wallet {uuid4().hex[:6]}",
+        tipo=TipoWallet.principal,
+        moneda=moneda,
+        estado=estado,
+        saldo=saldo,
+        es_principal=es_principal,
+        usuario_id=user.id,
+        organizacion_id=user.organizacion_id,
+    )
+    db.add(wallet)
+    db.commit()
+    db.refresh(wallet)
+    return wallet
 
 
-
+def onboarding_payload(slug: str | None = None, email: str | None = None) -> dict[str, object]:
+    suffix = uuid4().hex[:8]
+    return {
+        "organizacion": {
+            "nombre": f"Tenant {suffix}",
+            "slug": slug or f"tenant-{suffix}",
+            "email_contacto": f"contacto-{suffix}@example.com",
+        },
+        "owner": {
+            "nombre": f"Owner {suffix}",
+            "email": email or f"owner-{suffix}@example.com",
+            "password": "Password123!",
+        },
+    }
 

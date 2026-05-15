@@ -1,0 +1,202 @@
+"""initial_wallet_saas_schema
+
+Revision ID: 20260514_0001
+Revises:
+Create Date: 2026-05-14 00:00:00
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+
+revision: str = "20260514_0001"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+rol_usuario = postgresql.ENUM(
+    "cliente", "admin", "owner", "soporte", "super_admin", name="rol_usuario", create_type=False
+)
+estado_organizacion = postgresql.ENUM(
+    "activa", "inactiva", "suspendida", name="estado_organizacion", create_type=False
+)
+tipo_wallet = postgresql.ENUM("principal", "ahorro", "empresa", "recompensas", name="tipo_wallet", create_type=False)
+estado_wallet = postgresql.ENUM(
+    "activa", "inactiva", "congelada", "cerrada", name="estado_wallet", create_type=False
+)
+moneda_wallet = postgresql.ENUM("ARS", "USD", "PUNTOS", name="moneda_wallet", create_type=False)
+tipo_movimiento = postgresql.ENUM(
+    "deposito",
+    "retiro",
+    "transferencia",
+    "pago",
+    "cashback",
+    "ajuste_admin",
+    "reversa",
+    name="tipo_movimiento",
+    create_type=False,
+)
+estado_movimiento = postgresql.ENUM(
+    "aprobada", "pendiente", "rechazada", "cancelada", "revertida", name="estado_movimiento", create_type=False
+)
+tipo_notificacion = postgresql.ENUM(
+    "bienvenida", "movimiento", "seguridad", "generica", name="tipo_notificacion", create_type=False
+)
+estado_notificacion = postgresql.ENUM("queued", "sent", "failed", name="estado_notificacion", create_type=False)
+
+
+def upgrade() -> None:
+    bind = op.get_bind()
+    rol_usuario.create(bind, checkfirst=True)
+    estado_organizacion.create(bind, checkfirst=True)
+    tipo_wallet.create(bind, checkfirst=True)
+    estado_wallet.create(bind, checkfirst=True)
+    moneda_wallet.create(bind, checkfirst=True)
+    tipo_movimiento.create(bind, checkfirst=True)
+    estado_movimiento.create(bind, checkfirst=True)
+    tipo_notificacion.create(bind, checkfirst=True)
+    estado_notificacion.create(bind, checkfirst=True)
+
+    op.create_table(
+        "organizaciones",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("nombre", sa.String(length=150), nullable=False),
+        sa.Column("slug", sa.String(length=120), nullable=False),
+        sa.Column("email_contacto", sa.String(length=255), nullable=False),
+        sa.Column("estado", estado_organizacion, nullable=False),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("slug"),
+    )
+
+    op.create_table(
+        "usuarios",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("nombre", sa.String(length=100), nullable=False),
+        sa.Column("email", sa.String(length=255), nullable=False),
+        sa.Column("hashed_password", sa.String(length=255), nullable=False),
+        sa.Column("es_activo", sa.Boolean(), nullable=False),
+        sa.Column("rol", rol_usuario, nullable=False),
+        sa.Column("intentos_fallidos", sa.Integer(), nullable=False),
+        sa.Column("bloqueado_hasta", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("email"),
+    )
+    op.create_index("ix_usuarios_id", "usuarios", ["id"], unique=False)
+    op.create_index("ix_usuarios_organizacion_id", "usuarios", ["organizacion_id"], unique=False)
+
+    op.create_table(
+        "wallets",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("alias", sa.String(length=80), nullable=True),
+        sa.Column("tipo", tipo_wallet, nullable=False),
+        sa.Column("estado", estado_wallet, nullable=False),
+        sa.Column("moneda", moneda_wallet, nullable=False),
+        sa.Column("saldo", sa.Numeric(18, 2), nullable=False),
+        sa.Column("limite_operacion", sa.Numeric(18, 2), nullable=True),
+        sa.Column("es_principal", sa.Boolean(), nullable=False),
+        sa.Column("usuario_id", sa.Integer(), nullable=False),
+        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["usuario_id"], ["usuarios.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_wallets_id", "wallets", ["id"], unique=False)
+    op.create_index("ix_wallets_organizacion_id", "wallets", ["organizacion_id"], unique=False)
+
+    op.create_table(
+        "movimientos",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("wallet_origen_id", sa.Integer(), nullable=False),
+        sa.Column("wallet_destino_id", sa.Integer(), nullable=False),
+        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("monto", sa.Numeric(18, 2), nullable=False),
+        sa.Column("tipo", tipo_movimiento, nullable=False),
+        sa.Column("estado", estado_movimiento, nullable=False),
+        sa.Column("descripcion", sa.String(length=255), nullable=True),
+        sa.Column("referencia_externa", sa.String(length=120), nullable=True),
+        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("movimiento_origen_id", sa.Integer(), nullable=True),
+        sa.Column("es_reversa", sa.Boolean(), nullable=False),
+        sa.Column("motivo_reversa", sa.String(length=255), nullable=True),
+        sa.Column("fecha", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["movimiento_origen_id"], ["movimientos.id"]),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["wallet_destino_id"], ["wallets.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["wallet_origen_id"], ["wallets.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_movimientos_id", "movimientos", ["id"], unique=False)
+    op.create_index("ix_movimientos_movimiento_origen_id", "movimientos", ["movimiento_origen_id"], unique=False)
+    op.create_index("ix_movimientos_organizacion_id", "movimientos", ["organizacion_id"], unique=False)
+    op.create_index("ix_movimientos_referencia_externa", "movimientos", ["referencia_externa"], unique=False)
+    op.create_index("ix_movimientos_wallet_destino_id", "movimientos", ["wallet_destino_id"], unique=False)
+    op.create_index("ix_movimientos_wallet_origen_id", "movimientos", ["wallet_origen_id"], unique=False)
+
+    op.create_table(
+        "audit_logs",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("evento", sa.String(length=120), nullable=False),
+        sa.Column("mensaje", sa.String(length=500), nullable=False),
+        sa.Column("nivel", sa.String(length=20), nullable=False),
+        sa.Column("actor_usuario_id", sa.Integer(), nullable=True),
+        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("endpoint", sa.String(length=255), nullable=True),
+        sa.Column("ip", sa.String(length=80), nullable=True),
+        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("fecha", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["actor_usuario_id"], ["usuarios.id"]),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_audit_logs_evento", "audit_logs", ["evento"], unique=False)
+    op.create_index("ix_audit_logs_id", "audit_logs", ["id"], unique=False)
+    op.create_index("ix_audit_logs_organizacion_id", "audit_logs", ["organizacion_id"], unique=False)
+
+    op.create_table(
+        "notificaciones",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("usuario_id", sa.Integer(), nullable=True),
+        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("tipo", tipo_notificacion, nullable=False),
+        sa.Column("estado", estado_notificacion, nullable=False),
+        sa.Column("asunto", sa.String(length=180), nullable=False),
+        sa.Column("destinatario", sa.String(length=255), nullable=False),
+        sa.Column("cuerpo", sa.Text(), nullable=False),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_envio", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"]),
+        sa.ForeignKeyConstraint(["usuario_id"], ["usuarios.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_notificaciones_id", "notificaciones", ["id"], unique=False)
+    op.create_index("ix_notificaciones_organizacion_id", "notificaciones", ["organizacion_id"], unique=False)
+    op.create_index("ix_notificaciones_usuario_id", "notificaciones", ["usuario_id"], unique=False)
+
+
+def downgrade() -> None:
+    op.drop_table("notificaciones")
+    op.drop_table("audit_logs")
+    op.drop_table("movimientos")
+    op.drop_table("wallets")
+    op.drop_table("usuarios")
+    op.drop_table("organizaciones")
+
+    bind = op.get_bind()
+    estado_notificacion.drop(bind, checkfirst=True)
+    tipo_notificacion.drop(bind, checkfirst=True)
+    estado_movimiento.drop(bind, checkfirst=True)
+    tipo_movimiento.drop(bind, checkfirst=True)
+    moneda_wallet.drop(bind, checkfirst=True)
+    estado_wallet.drop(bind, checkfirst=True)
+    tipo_wallet.drop(bind, checkfirst=True)
+    estado_organizacion.drop(bind, checkfirst=True)
+    rol_usuario.drop(bind, checkfirst=True)

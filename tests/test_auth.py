@@ -1,91 +1,45 @@
-# tests/test_auth.py
-import random
-from starlette.testclient import TestClient
-from typing import Dict, Any
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from tests.conftest import api_data, create_org, onboarding_payload
 
 
-# 🔧 Helper para generar emails únicos
-def generar_email() -> str:
-    return f"test{random.randint(1000, 9999)}@example.com"
+def test_registro_login_y_usuario_actual(client: TestClient, db_session: Session) -> None:
+    org = create_org(db_session, slug="registro-auth")
+
+    registro = client.post(
+        "/api/v1/auth/register",
+        json={
+            "nombre": "Cliente Auth",
+            "email": "cliente-auth@example.com",
+            "password": "Password123!",
+            "organizacion_slug": org.slug,
+        },
+    )
+    assert registro.status_code == 201, registro.text
+    assert api_data(registro)["rol"] == "cliente"
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "cliente-auth@example.com", "password": "Password123!"},
+    )
+    assert login.status_code == 200, login.text
+    token = login.json()["access_token"]
+
+    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200, me.text
+    assert api_data(me)["email"] == "cliente-auth@example.com"
 
 
-# ─────────────────────────────────────────────
-# 1) Registro exitoso
-# ─────────────────────────────────────────────
-def test_registro_exitoso(client: TestClient) -> None:
-    email: str = generar_email()
-    payload: Dict[str, Any] = {"nombre": "Usuario Test", "email": email, "password": "Password123!"}
+def test_login_owner_creado_por_onboarding(client: TestClient) -> None:
+    payload = onboarding_payload()
+    creado = client.post("/api/v1/onboarding/registro-organizacion", json=payload)
+    assert creado.status_code == 201, creado.text
 
-    r = client.post("/auth/register", json=payload)
-    assert r.status_code == 201, r.text
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["owner"]["email"], "password": payload["owner"]["password"]},
+    )
+    assert login.status_code == 200, login.text
+    assert login.json()["token_type"] == "bearer"
 
-    data: Dict[str, Any] = r.json()
-    assert data["usuario"]["email"] == email
-    assert data["usuario"]["rol"] == "cliente"
-
-
-# ─────────────────────────────────────────────
-# 2) Registro duplicado
-# ─────────────────────────────────────────────
-def test_registro_duplicado(client: TestClient) -> None:
-    email: str = generar_email()
-    payload: Dict[str, Any] = {"nombre": "Usuario Test", "email": email, "password": "Password123!"}
-
-    r1 = client.post("/auth/register", json=payload)
-    assert r1.status_code == 201, r1.text
-
-    r2 = client.post("/auth/register", json=payload)
-    assert r2.status_code == 400, r2.text  # "El email ya está registrado"
-
-
-# ─────────────────────────────────────────────
-# 3) Login exitoso
-# ─────────────────────────────────────────────
-def test_login_exitoso(client: TestClient) -> None:
-    email: str = generar_email()
-    payload: Dict[str, Any] = {"nombre": "Usuario Test", "email": email, "password": "Password123!"}
-
-    r_reg = client.post("/auth/register", json=payload)
-    assert r_reg.status_code == 201, r_reg.text
-
-    r_login = client.post("/auth/login", json={"email": email, "password": "Password123!"})
-    assert r_login.status_code == 200, r_login.text
-
-    token_data: Dict[str, Any] = r_login.json()
-    assert "access_token" in token_data
-    assert token_data["token_type"] == "bearer"
-
-
-# ─────────────────────────────────────────────
-# 4) Login con credenciales inválidas
-# ─────────────────────────────────────────────
-def test_login_invalido(client: TestClient) -> None:
-    email: str = generar_email()
-    payload: Dict[str, Any] = {"nombre": "Usuario Test", "email": email, "password": "Password123!"}
-
-    r_reg = client.post("/auth/register", json=payload)
-    assert r_reg.status_code == 201, r_reg.text
-
-    r_bad = client.post("/auth/login", json={"email": email, "password": "ClaveIncorrecta!"})
-    assert r_bad.status_code == 400, r_bad.text  # "Credenciales inválidas"
-
-
-# ─────────────────────────────────────────────
-# 5) Login bloqueado tras múltiples intentos
-# ─────────────────────────────────────────────
-def test_login_bloqueado(client: TestClient) -> None:
-    email: str = generar_email()
-    payload: Dict[str, Any] = {"nombre": "Usuario Test", "email": email, "password": "Password123!"}
-
-    r_reg = client.post("/auth/register", json=payload)
-    assert r_reg.status_code == 201, r_reg.text
-
-    bad: Dict[str, str] = {"email": email, "password": "ClaveIncorrecta!"}
-
-    # En tu service: al alcanzar 5 intentos, bloquea por 15'
-    for _ in range(5):
-        client.post("/auth/login", json=bad)  # devuelven 400
-
-    # 6º intento ya debería estar bloqueado → 403
-    r_block = client.post("/auth/login", json=bad)
-    assert r_block.status_code == 403, r_block.text

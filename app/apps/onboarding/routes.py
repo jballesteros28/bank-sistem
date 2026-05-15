@@ -1,0 +1,24 @@
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
+
+from app.apps.onboarding.schemas import OnboardingRegistroCreate, OnboardingRegistroResponse
+from app.apps.onboarding.services import registrar_organizacion_con_owner
+from app.core.database import get_db
+from app.shared.responses import ApiResponse, ok
+
+
+router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
+
+
+@router.post(
+    "/registro-organizacion",
+    response_model=ApiResponse[OnboardingRegistroResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+def post_registro_organizacion(
+    datos: OnboardingRegistroCreate,
+    db: Session = Depends(get_db),
+) -> ApiResponse[OnboardingRegistroResponse]:
+    resultado = registrar_organizacion_con_owner(datos, db)
+    return ok(resultado, "Organizacion registrada correctamente.")
+

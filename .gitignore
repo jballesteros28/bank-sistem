@@ -1,111 +1,38 @@
-# ============================================
-# 🐍 Python
-# ============================================
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.pyo
 *.pyd
-*.so
 *.egg-info/
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg
-MANIFEST
-
-# ============================================
-# 🧪 Tests y coverage
-# ============================================
+.pytest_cache/
 .coverage
 htmlcov/
-.tox/
-.pytest_cache/
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-*.pot
-*.mo
-*.spec
 
-# ============================================
-# 📦 Entornos virtuales
-# ============================================
-env/
+# Virtual environments
 venv/
-ENV/
-env.bak/
-venv.bak/
-.pyenv
-.venv
-.vscode/
-.idea/
+.venv/
+env/
 
-# ============================================
-# ⚙️ Archivos de configuración locales
-# ============================================
+# Local environment
 .env
 .env.*
+!.env.example
 *.local
-config.ini
-settings.json
-core/__pycache__/
-database/__pycache__/
 
-# ============================================
-# 🐳 Docker
-# ============================================
+# Runtime and temporary artifacts
+*.log
+*.out
+*.err
 *.pid
-*.tar
-docker-compose.override.yml
-**/postgres_data/
-**/mongo_data/
-postgres_data/
-mongo_data/
+tmp/
+temp/
+.codex_tmp/
+wallet_saas_test.db
 
-# ============================================
-# 🧰 Editor y sistema
-# ============================================
+# Editors and OS
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ============================================
-# 🧠 Archivos temporales o personales
-# ============================================
-notes.txt
-temp/
-tmp/
-*.bak
-*.old
-*.swp
-*.swo
-
-# ============================================
-# 📦 Reportes y artefactos
-# ============================================
-logs/
-*.log
-*.out
-*.err
-*.csv
-*.json
-
-# ============================================
-# 🚀 Archivos de despliegue privados
-# ============================================
-.env
-.env.dev
-.env.prod
-.env.example  # <- solo subís este, el real no.
-.codex_tmp/
