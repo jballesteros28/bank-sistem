@@ -19,6 +19,7 @@ from app.apps.movimientos.schemas import (
     MovimientoReversaCreate,
     MovimientoTransferenciaCreate,
 )
+from app.apps.planes.limit_service import validar_limite_movimientos_mes
 from app.apps.wallets.models import Wallet
 from app.core.permissions import is_admin, is_operator, is_super_admin
 from app.shared.enums import EstadoMovimiento, EstadoWallet, TipoMovimiento
@@ -94,6 +95,8 @@ def _create_movement(
     es_reversa: bool = False,
     motivo_reversa: str | None = None,
 ) -> Movimiento:
+    if estado == EstadoMovimiento.aprobada:
+        validar_limite_movimientos_mes(db, organization_id)
     movimiento = Movimiento(
         wallet_origen_id=origen.id,
         wallet_destino_id=destino.id,
@@ -401,4 +404,3 @@ def obtener_movimiento(
         if visible is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movimiento no encontrado.")
     return MovimientoResponse.model_validate(movimiento)
-

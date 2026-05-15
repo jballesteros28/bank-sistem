@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.apps.onboarding.schemas import OnboardingRegistroCreate, OnboardingRegistroResponse
 from app.apps.organizaciones.models import Organizacion
 from app.apps.organizaciones.schemas import OrganizacionResponse
+from app.apps.planes.services import asegurar_planes_base, obtener_plan_por_codigo
 from app.apps.usuarios.models import Usuario
 from app.apps.usuarios.schemas import UsuarioResponse
 from app.apps.wallets.models import Wallet
@@ -28,11 +29,22 @@ def registrar_organizacion_con_owner(
     if db.scalar(select(Usuario.id).where(Usuario.email == owner_email)) is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ya existe un usuario con ese email.")
 
+    plan_free = obtener_plan_por_codigo("free", db)
+    if plan_free is None:
+        asegurar_planes_base(db)
+        plan_free = obtener_plan_por_codigo("free", db)
+    if plan_free is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Plan free no disponible.")
+
     try:
         organizacion = Organizacion(
             nombre=datos.organizacion.nombre.strip(),
             slug=slug,
             email_contacto=normalize_email(str(datos.organizacion.email_contacto)),
+            nombre_comercial=datos.organizacion.nombre.strip(),
+            moneda_default=MonedaWallet.ARS.value,
+            timezone="America/Argentina/Buenos_Aires",
+            plan_id=plan_free.id,
             estado=EstadoOrganizacion.activa,
         )
         db.add(organizacion)
@@ -74,4 +86,3 @@ def registrar_organizacion_con_owner(
         owner=UsuarioResponse.model_validate(owner),
         wallet_principal=WalletResponse.model_validate(wallet_principal),
     )
-

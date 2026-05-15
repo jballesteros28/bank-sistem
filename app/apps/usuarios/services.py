@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.apps.auth.schemas import DatosUsuarioToken
 from app.apps.organizaciones.dependencies import resolve_organization_scope
 from app.apps.organizaciones.models import Organizacion
+from app.apps.planes.limit_service import validar_limite_usuarios
 from app.apps.usuarios.models import Usuario
 from app.apps.usuarios.permissions import ensure_can_manage_users, ensure_role_is_assignable
 from app.apps.usuarios.schemas import UsuarioCreate, UsuarioResponse, UsuarioUpdate
@@ -42,6 +43,8 @@ def crear_usuario(
     organizacion_id = _resolve_target_organization(datos.organizacion_id, current_user, db)
     if organizacion_id is None and datos.rol != RolUsuario.super_admin:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El usuario requiere organizacion.")
+    if organizacion_id is not None:
+        validar_limite_usuarios(db, organizacion_id)
 
     usuario = Usuario(
         nombre=datos.nombre.strip(),
@@ -106,4 +109,3 @@ def actualizar_usuario(
     db.commit()
     db.refresh(usuario)
     return UsuarioResponse.model_validate(usuario)
-

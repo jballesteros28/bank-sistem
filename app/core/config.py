@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "Wallet SaaS API"
     ENVIRONMENT: str = "development"
-    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/wallet_saas"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:Jdbaba.10@localhost:5432/wallet_saas"
     MONGO_URI: str = "mongodb://localhost:27017"
     MONGO_DB: str = "wallet_saas_logs"
     SECRET_KEY: str = "change-me"

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.schemas import DatosUsuarioToken
 from app.apps.organizaciones.dependencies import resolve_organization_scope
+from app.apps.planes.limit_service import validar_limite_wallets
 from app.apps.usuarios.models import Usuario
 from app.apps.wallets.models import Wallet
 from app.apps.wallets.permissions import ensure_wallet_operation_allowed
@@ -91,6 +92,7 @@ def _get_wallet_visible(wallet_id: int, current_user: DatosUsuarioToken, db: Ses
 
 def crear_wallet(datos: WalletCreate, current_user: DatosUsuarioToken, db: Session) -> WalletResponse:
     usuario_id, organizacion_id = _resolve_create_target(datos, current_user, db)
+    validar_limite_wallets(db, organizacion_id)
     if datos.es_principal:
         _ensure_single_primary(db, usuario_id, organizacion_id)
 
@@ -182,4 +184,3 @@ def cerrar_wallet(wallet_id: int, current_user: DatosUsuarioToken, db: Session) 
     db.commit()
     db.refresh(wallet)
     return WalletResponse.model_validate(wallet)
-

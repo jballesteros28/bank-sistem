@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.schemas import LoginUsuario, RegistroUsuario, TokenRespuesta
 from app.apps.organizaciones.models import Organizacion
+from app.apps.planes.limit_service import validar_limite_usuarios
 from app.apps.usuarios.models import Usuario
 from app.apps.usuarios.schemas import UsuarioResponse
 from app.core.config import settings
@@ -28,6 +29,8 @@ def registrar_usuario(datos: RegistroUsuario, db: Session) -> UsuarioResponse:
 
     if db.scalar(select(Usuario.id).where(Usuario.email == email)) is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El email ya esta registrado.")
+
+    validar_limite_usuarios(db, organizacion.id)
 
     usuario = Usuario(
         nombre=datos.nombre.strip(),
@@ -81,4 +84,3 @@ def login_usuario(datos: LoginUsuario, db: Session) -> TokenRespuesta:
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return TokenRespuesta(access_token=access_token)
-
