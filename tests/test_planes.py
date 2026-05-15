@@ -153,7 +153,7 @@ def test_free_bloquea_movimientos_al_superar_limite_mensual(client: TestClient, 
     response = client.post(
         "/api/v1/movimientos/deposito",
         headers=auth_headers(admin),
-        json={"wallet_destino_id": wallet.id, "monto": "1.00"},
+        json={"wallet_destino_id": str(wallet.id), "monto": "1.00"},
     )
 
     assert response.status_code == 403

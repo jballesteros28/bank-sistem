@@ -9,10 +9,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 os.environ["APP_NAME"] = "Wallet SaaS API"
 os.environ["ENVIRONMENT"] = "test"
-os.environ["DATABASE_URL"] = "sqlite+pysqlite:///./wallet_saas_test.db"
+os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["ALGORITHM"] = "HS256"
 os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "60"
@@ -29,7 +30,12 @@ from app.shared.enums import EstadoOrganizacion, EstadoWallet, MonedaWallet, Rol
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 assert_test_database_url(TEST_DATABASE_URL)
 
-engine_test = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False}, future=True)
+engine_test = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+    future=True,
+)
 TestingSessionLocal = sessionmaker(bind=engine_test, autoflush=False, autocommit=False, future=True)
 
 
@@ -151,4 +157,3 @@ def onboarding_payload(slug: str | None = None, email: str | None = None) -> dic
             "password": "Password123!",
         },
     }
-

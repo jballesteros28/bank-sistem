@@ -1,8 +1,8 @@
 """initial_wallet_saas_schema
 
-Revision ID: 20260514_0001
+Revision ID: 20260515_0001
 Revises:
-Create Date: 2026-05-14 00:00:00
+Create Date: 2026-05-15 00:00:00
 """
 from typing import Sequence, Union
 
@@ -11,11 +11,13 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision: str = "20260514_0001"
+revision: str = "20260515_0001"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+
+uuid_pk = postgresql.UUID(as_uuid=True)
 
 rol_usuario = postgresql.ENUM(
     "cliente", "admin", "owner", "soporte", "super_admin", name="rol_usuario", create_type=False
@@ -43,13 +45,32 @@ estado_movimiento = postgresql.ENUM(
     "aprobada", "pendiente", "rechazada", "cancelada", "revertida", name="estado_movimiento", create_type=False
 )
 tipo_notificacion = postgresql.ENUM(
-    "bienvenida", "movimiento", "seguridad", "generica", name="tipo_notificacion", create_type=False
+    "onboarding_exitoso",
+    "wallet_creada",
+    "movimiento_deposito",
+    "movimiento_retiro",
+    "movimiento_transferencia",
+    "movimiento_pago",
+    "movimiento_cashback",
+    "movimiento_ajuste_admin",
+    "movimiento_reversa",
+    "wallet_congelada",
+    "organizacion_suspendida",
+    "seguridad",
+    name="tipo_notificacion",
+    create_type=False,
 )
-estado_notificacion = postgresql.ENUM("queued", "sent", "failed", name="estado_notificacion", create_type=False)
+canal_notificacion = postgresql.ENUM("interna", "email", name="canal_notificacion", create_type=False)
+
+
+def _uuid_id_column() -> sa.Column:
+    return sa.Column("id", uuid_pk, server_default=sa.text("gen_random_uuid()"), nullable=False)
 
 
 def upgrade() -> None:
     bind = op.get_bind()
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+
     rol_usuario.create(bind, checkfirst=True)
     estado_organizacion.create(bind, checkfirst=True)
     tipo_wallet.create(bind, checkfirst=True)
@@ -58,24 +79,62 @@ def upgrade() -> None:
     tipo_movimiento.create(bind, checkfirst=True)
     estado_movimiento.create(bind, checkfirst=True)
     tipo_notificacion.create(bind, checkfirst=True)
-    estado_notificacion.create(bind, checkfirst=True)
+    canal_notificacion.create(bind, checkfirst=True)
 
     op.create_table(
-        "organizaciones",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("nombre", sa.String(length=150), nullable=False),
-        sa.Column("slug", sa.String(length=120), nullable=False),
-        sa.Column("email_contacto", sa.String(length=255), nullable=False),
-        sa.Column("estado", estado_organizacion, nullable=False),
+        "planes",
+        _uuid_id_column(),
+        sa.Column("nombre", sa.String(length=100), nullable=False),
+        sa.Column("codigo", sa.String(length=50), nullable=False),
+        sa.Column("descripcion", sa.Text(), nullable=True),
+        sa.Column("precio_mensual", sa.Numeric(18, 2), nullable=False),
+        sa.Column("limite_usuarios", sa.Integer(), nullable=True),
+        sa.Column("limite_wallets", sa.Integer(), nullable=True),
+        sa.Column("limite_movimientos_mes", sa.Integer(), nullable=True),
+        sa.Column("permite_webhooks", sa.Boolean(), nullable=False),
+        sa.Column("permite_white_label", sa.Boolean(), nullable=False),
+        sa.Column("activo", sa.Boolean(), nullable=False),
         sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
         sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_planes_codigo", "planes", ["codigo"], unique=True)
+    op.create_index("ix_planes_nombre", "planes", ["nombre"], unique=True)
+
+    op.create_table(
+        "organizaciones",
+        _uuid_id_column(),
+        sa.Column("nombre", sa.String(length=150), nullable=False),
+        sa.Column("slug", sa.String(length=120), nullable=False),
+        sa.Column("email_contacto", sa.String(length=255), nullable=False),
+        sa.Column("nombre_comercial", sa.String(length=150), nullable=True),
+        sa.Column("logo_url", sa.String(length=500), nullable=True),
+        sa.Column("color_primario", sa.String(length=7), nullable=True),
+        sa.Column("color_secundario", sa.String(length=7), nullable=True),
+        sa.Column("subdominio", sa.String(length=120), nullable=True),
+        sa.Column("dominio_personalizado", sa.String(length=255), nullable=True),
+        sa.Column("moneda_default", sa.String(length=20), nullable=False),
+        sa.Column("timezone", sa.String(length=80), nullable=False),
+        sa.Column("permite_white_label_activo", sa.Boolean(), nullable=False),
+        sa.Column("plan_id", uuid_pk, nullable=True),
+        sa.Column("estado", estado_organizacion, nullable=False),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["plan_id"], ["planes.id"]),
+        sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("slug"),
+    )
+    op.create_index("ix_organizaciones_subdominio", "organizaciones", ["subdominio"], unique=True)
+    op.create_index(
+        "ix_organizaciones_dominio_personalizado",
+        "organizaciones",
+        ["dominio_personalizado"],
+        unique=True,
     )
 
     op.create_table(
         "usuarios",
-        sa.Column("id", sa.Integer(), nullable=False),
+        _uuid_id_column(),
         sa.Column("nombre", sa.String(length=100), nullable=False),
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
@@ -83,7 +142,7 @@ def upgrade() -> None:
         sa.Column("rol", rol_usuario, nullable=False),
         sa.Column("intentos_fallidos", sa.Integer(), nullable=False),
         sa.Column("bloqueado_hasta", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("organizacion_id", uuid_pk, nullable=True),
         sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email"),
@@ -93,7 +152,7 @@ def upgrade() -> None:
 
     op.create_table(
         "wallets",
-        sa.Column("id", sa.Integer(), nullable=False),
+        _uuid_id_column(),
         sa.Column("alias", sa.String(length=80), nullable=True),
         sa.Column("tipo", tipo_wallet, nullable=False),
         sa.Column("estado", estado_wallet, nullable=False),
@@ -101,8 +160,8 @@ def upgrade() -> None:
         sa.Column("saldo", sa.Numeric(18, 2), nullable=False),
         sa.Column("limite_operacion", sa.Numeric(18, 2), nullable=True),
         sa.Column("es_principal", sa.Boolean(), nullable=False),
-        sa.Column("usuario_id", sa.Integer(), nullable=False),
-        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("usuario_id", uuid_pk, nullable=False),
+        sa.Column("organizacion_id", uuid_pk, nullable=False),
         sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
         sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
@@ -114,17 +173,17 @@ def upgrade() -> None:
 
     op.create_table(
         "movimientos",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("wallet_origen_id", sa.Integer(), nullable=False),
-        sa.Column("wallet_destino_id", sa.Integer(), nullable=False),
-        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=False),
+        _uuid_id_column(),
+        sa.Column("wallet_origen_id", uuid_pk, nullable=False),
+        sa.Column("wallet_destino_id", uuid_pk, nullable=False),
+        sa.Column("organizacion_id", uuid_pk, nullable=False),
         sa.Column("monto", sa.Numeric(18, 2), nullable=False),
         sa.Column("tipo", tipo_movimiento, nullable=False),
         sa.Column("estado", estado_movimiento, nullable=False),
         sa.Column("descripcion", sa.String(length=255), nullable=True),
         sa.Column("referencia_externa", sa.String(length=120), nullable=True),
         sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("movimiento_origen_id", sa.Integer(), nullable=True),
+        sa.Column("movimiento_origen_id", uuid_pk, nullable=True),
         sa.Column("es_reversa", sa.Boolean(), nullable=False),
         sa.Column("motivo_reversa", sa.String(length=255), nullable=True),
         sa.Column("fecha", sa.DateTime(timezone=True), nullable=False),
@@ -143,12 +202,12 @@ def upgrade() -> None:
 
     op.create_table(
         "audit_logs",
-        sa.Column("id", sa.Integer(), nullable=False),
+        _uuid_id_column(),
         sa.Column("evento", sa.String(length=120), nullable=False),
         sa.Column("mensaje", sa.String(length=500), nullable=False),
         sa.Column("nivel", sa.String(length=20), nullable=False),
-        sa.Column("actor_usuario_id", sa.Integer(), nullable=True),
-        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("actor_usuario_id", uuid_pk, nullable=True),
+        sa.Column("organizacion_id", uuid_pk, nullable=True),
         sa.Column("endpoint", sa.String(length=255), nullable=True),
         sa.Column("ip", sa.String(length=80), nullable=True),
         sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -163,15 +222,19 @@ def upgrade() -> None:
 
     op.create_table(
         "notificaciones",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("usuario_id", sa.Integer(), nullable=True),
-        sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=True),
+        _uuid_id_column(),
+        sa.Column("usuario_id", uuid_pk, nullable=True),
+        sa.Column("organizacion_id", uuid_pk, nullable=False),
         sa.Column("tipo", tipo_notificacion, nullable=False),
-        sa.Column("estado", estado_notificacion, nullable=False),
-        sa.Column("asunto", sa.String(length=180), nullable=False),
-        sa.Column("destinatario", sa.String(length=255), nullable=False),
-        sa.Column("cuerpo", sa.Text(), nullable=False),
+        sa.Column("canal", canal_notificacion, nullable=False),
+        sa.Column("titulo", sa.String(length=180), nullable=False),
+        sa.Column("mensaje", sa.Text(), nullable=False),
+        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("leida", sa.Boolean(), nullable=False),
+        sa.Column("enviada", sa.Boolean(), nullable=False),
+        sa.Column("error_envio", sa.Text(), nullable=True),
         sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_lectura", sa.DateTime(timezone=True), nullable=True),
         sa.Column("fecha_envio", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"]),
         sa.ForeignKeyConstraint(["usuario_id"], ["usuarios.id"]),
@@ -189,9 +252,10 @@ def downgrade() -> None:
     op.drop_table("wallets")
     op.drop_table("usuarios")
     op.drop_table("organizaciones")
+    op.drop_table("planes")
 
     bind = op.get_bind()
-    estado_notificacion.drop(bind, checkfirst=True)
+    canal_notificacion.drop(bind, checkfirst=True)
     tipo_notificacion.drop(bind, checkfirst=True)
     estado_movimiento.drop(bind, checkfirst=True)
     tipo_movimiento.drop(bind, checkfirst=True)

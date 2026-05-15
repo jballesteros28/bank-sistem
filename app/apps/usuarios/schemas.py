@@ -25,11 +25,10 @@ class UsuarioUpdate(BaseModel):
 class UsuarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     nombre: str
     email: EmailStr
     rol: RolUsuario
     es_activo: bool
     organizacion_id: UUID | None = None
     bloqueado_hasta: datetime | None = None
-

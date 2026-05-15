@@ -21,7 +21,7 @@ from app.apps.movimientos.schemas import (
 )
 from app.apps.planes.limit_service import validar_limite_movimientos_mes
 from app.apps.wallets.models import Wallet
-from app.core.permissions import is_admin, is_operator, is_super_admin
+from app.core.permissions import can_consult_financial_info, is_financial_operator, is_super_admin
 from app.shared.enums import EstadoMovimiento, EstadoWallet, TipoMovimiento
 from app.shared.utils import normalize_decimal
 
@@ -30,17 +30,24 @@ def _amount(value: Decimal | str | int | float) -> Decimal:
     return normalize_decimal(value)
 
 
+def _json_metadata(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    cleaned: dict[str, Any] = {}
+    for key, item in value.items():
+        if isinstance(item, (UUID, Decimal)):
+            cleaned[key] = str(item)
+        else:
+            cleaned[key] = item
+    return cleaned
+
+
 def _ensure_operator(current_user: DatosUsuarioToken) -> None:
-    if not is_operator(current_user.rol):
+    if not is_financial_operator(current_user.rol):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operacion restringida a operadores.")
 
 
-def _ensure_admin(current_user: DatosUsuarioToken) -> None:
-    if not is_admin(current_user.rol):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operacion restringida a administradores.")
-
-
-def _get_wallet_locked(db: Session, wallet_id: int, label: str) -> Wallet:
+def _get_wallet_locked(db: Session, wallet_id: UUID, label: str) -> Wallet:
     wallet = db.scalar(select(Wallet).where(Wallet.id == wallet_id).with_for_update())
     if wallet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Wallet {label} no encontrada.")
@@ -91,7 +98,7 @@ def _create_movement(
     referencia_externa: str | None = None,
     metadata: dict[str, Any] | None = None,
     estado: EstadoMovimiento = EstadoMovimiento.aprobada,
-    movimiento_origen_id: int | None = None,
+    movimiento_origen_id: UUID | None = None,
     es_reversa: bool = False,
     motivo_reversa: str | None = None,
 ) -> Movimiento:
@@ -106,7 +113,7 @@ def _create_movement(
         estado=estado,
         descripcion=(descripcion or "").strip() or None,
         referencia_externa=referencia_externa,
-        metadata_movimiento=metadata,
+        metadata_movimiento=_json_metadata(metadata),
         movimiento_origen_id=movimiento_origen_id,
         es_reversa=es_reversa,
         motivo_reversa=motivo_reversa,
@@ -250,7 +257,8 @@ def crear_ajuste_admin(
     current_user: DatosUsuarioToken,
     db: Session,
 ) -> MovimientoResponse:
-    _ensure_admin(current_user)
+    if not is_financial_operator(current_user.rol):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operacion restringida a operadores.")
     amount = _amount(datos.monto)
     destino = _get_wallet_locked(db, datos.wallet_destino_id, "destino")
     organization_id = _ensure_same_organization([destino], current_user)
@@ -279,7 +287,7 @@ def crear_ajuste_admin(
     return _commit(db, movimiento)
 
 
-def _get_reversible_movement(db: Session, movimiento_id: int, current_user: DatosUsuarioToken) -> Movimiento:
+def _get_reversible_movement(db: Session, movimiento_id: UUID, current_user: DatosUsuarioToken) -> Movimiento:
     movimiento = db.scalar(select(Movimiento).where(Movimiento.id == movimiento_id).with_for_update())
     if movimiento is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movimiento no encontrado.")
@@ -295,7 +303,7 @@ def _get_reversible_movement(db: Session, movimiento_id: int, current_user: Dato
 
 
 def crear_reversa(
-    movimiento_id: int,
+    movimiento_id: UUID,
     datos: MovimientoReversaCreate,
     current_user: DatosUsuarioToken,
     db: Session,
@@ -372,7 +380,7 @@ def listar_movimientos(
             query = query.where(Movimiento.organizacion_id == organizacion_id)
     else:
         query = query.where(Movimiento.organizacion_id == current_user.organizacion_id)
-        if not is_operator(current_user.rol):
+        if not can_consult_financial_info(current_user.rol):
             wallets_usuario = select(Wallet.id).where(Wallet.usuario_id == current_user.id)
             query = query.where(
                 or_(
@@ -385,7 +393,7 @@ def listar_movimientos(
 
 
 def obtener_movimiento(
-    movimiento_id: int,
+    movimiento_id: UUID,
     current_user: DatosUsuarioToken,
     db: Session,
 ) -> MovimientoResponse:
@@ -394,7 +402,7 @@ def obtener_movimiento(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movimiento no encontrado.")
     if not is_super_admin(current_user.rol) and movimiento.organizacion_id != current_user.organizacion_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movimiento no encontrado.")
-    if not is_operator(current_user.rol):
+    if not can_consult_financial_info(current_user.rol):
         visible = db.scalar(
             select(Wallet.id).where(
                 Wallet.usuario_id == current_user.id,

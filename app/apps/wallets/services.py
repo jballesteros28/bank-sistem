@@ -23,14 +23,14 @@ from app.shared.enums import EstadoWallet
 from app.shared.utils import normalize_decimal
 
 
-def _get_user_or_404(db: Session, usuario_id: int) -> Usuario:
+def _get_user_or_404(db: Session, usuario_id: UUID) -> Usuario:
     usuario = db.get(Usuario, usuario_id)
     if usuario is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
     return usuario
 
 
-def _resolve_create_target(datos: WalletCreate, current_user: DatosUsuarioToken, db: Session) -> tuple[int, UUID]:
+def _resolve_create_target(datos: WalletCreate, current_user: DatosUsuarioToken, db: Session) -> tuple[UUID, UUID]:
     usuario_id = datos.usuario_id or current_user.id
     usuario = _get_user_or_404(db, usuario_id)
 
@@ -51,9 +51,9 @@ def _resolve_create_target(datos: WalletCreate, current_user: DatosUsuarioToken,
 
 def _ensure_single_primary(
     db: Session,
-    usuario_id: int,
+    usuario_id: UUID,
     organizacion_id: UUID,
-    wallet_id: int | None = None,
+    wallet_id: UUID | None = None,
 ) -> None:
     query = select(Wallet.id).where(
         Wallet.usuario_id == usuario_id,
@@ -82,7 +82,7 @@ def _wallet_query_for_user(current_user: DatosUsuarioToken, organizacion_id: UUI
     return query
 
 
-def _get_wallet_visible(wallet_id: int, current_user: DatosUsuarioToken, db: Session) -> Wallet:
+def _get_wallet_visible(wallet_id: UUID, current_user: DatosUsuarioToken, db: Session) -> Wallet:
     query = _wallet_query_for_user(current_user).where(Wallet.id == wallet_id)
     wallet = db.scalar(query)
     if wallet is None:
@@ -116,7 +116,7 @@ def crear_wallet(datos: WalletCreate, current_user: DatosUsuarioToken, db: Sessi
 def listar_wallets(
     current_user: DatosUsuarioToken,
     db: Session,
-    usuario_id: int | None = None,
+    usuario_id: UUID | None = None,
     organizacion_id: UUID | None = None,
 ) -> list[WalletResponse]:
     query = _wallet_query_for_user(current_user, organizacion_id)
@@ -128,16 +128,16 @@ def listar_wallets(
     return [WalletResponse.model_validate(wallet) for wallet in wallets]
 
 
-def obtener_wallet(wallet_id: int, current_user: DatosUsuarioToken, db: Session) -> WalletResponse:
+def obtener_wallet(wallet_id: UUID, current_user: DatosUsuarioToken, db: Session) -> WalletResponse:
     return WalletResponse.model_validate(_get_wallet_visible(wallet_id, current_user, db))
 
 
-def obtener_balance(wallet_id: int, current_user: DatosUsuarioToken, db: Session) -> WalletBalanceResponse:
+def obtener_balance(wallet_id: UUID, current_user: DatosUsuarioToken, db: Session) -> WalletBalanceResponse:
     return WalletBalanceResponse.model_validate(_get_wallet_visible(wallet_id, current_user, db))
 
 
 def actualizar_wallet(
-    wallet_id: int,
+    wallet_id: UUID,
     datos: WalletUpdate,
     current_user: DatosUsuarioToken,
     db: Session,
@@ -160,7 +160,7 @@ def actualizar_wallet(
 
 
 def cambiar_estado_wallet(
-    wallet_id: int,
+    wallet_id: UUID,
     datos: WalletEstadoUpdate,
     current_user: DatosUsuarioToken,
     db: Session,
@@ -174,7 +174,7 @@ def cambiar_estado_wallet(
     return WalletResponse.model_validate(wallet)
 
 
-def cerrar_wallet(wallet_id: int, current_user: DatosUsuarioToken, db: Session) -> WalletResponse:
+def cerrar_wallet(wallet_id: UUID, current_user: DatosUsuarioToken, db: Session) -> WalletResponse:
     wallet = _get_wallet_visible(wallet_id, current_user, db)
     ensure_wallet_operation_allowed(current_user, wallet)
     if normalize_decimal(wallet.saldo) > Decimal("0.00"):

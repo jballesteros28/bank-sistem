@@ -31,16 +31,16 @@ class MovimientoBaseCreate(BaseModel):
 
 
 class MovimientoDepositoCreate(MovimientoBaseCreate):
-    wallet_destino_id: int = Field(..., gt=0)
+    wallet_destino_id: UUID
 
 
 class MovimientoRetiroCreate(MovimientoBaseCreate):
-    wallet_origen_id: int = Field(..., gt=0)
+    wallet_origen_id: UUID
 
 
 class MovimientoTransferenciaCreate(MovimientoBaseCreate):
-    wallet_origen_id: int = Field(..., gt=0)
-    wallet_destino_id: int = Field(..., gt=0)
+    wallet_origen_id: UUID
+    wallet_destino_id: UUID
 
 
 class MovimientoPagoCreate(MovimientoTransferenciaCreate):
@@ -48,11 +48,11 @@ class MovimientoPagoCreate(MovimientoTransferenciaCreate):
 
 
 class MovimientoCashbackCreate(MovimientoBaseCreate):
-    wallet_destino_id: int = Field(..., gt=0)
+    wallet_destino_id: UUID
 
 
 class MovimientoAjusteAdminCreate(MovimientoBaseCreate):
-    wallet_destino_id: int = Field(..., gt=0)
+    wallet_destino_id: UUID
     operacion: Literal["credito", "debito"]
     motivo: str = Field(..., min_length=3, max_length=255)
 
@@ -66,16 +66,16 @@ class MovimientoReversaCreate(BaseModel):
 class MovimientoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    wallet_origen_id: int
-    wallet_destino_id: int
+    id: UUID
+    wallet_origen_id: UUID
+    wallet_destino_id: UUID
     monto: Decimal
     tipo: TipoMovimiento
     estado: EstadoMovimiento
     descripcion: str | None = None
     referencia_externa: str | None = None
     metadata_movimiento: dict[str, Any] | None = Field(default=None, serialization_alias="metadata")
-    movimiento_origen_id: int | None = None
+    movimiento_origen_id: UUID | None = None
     es_reversa: bool
     motivo_reversa: str | None = None
     organizacion_id: UUID
@@ -85,4 +85,3 @@ class MovimientoResponse(BaseModel):
     @classmethod
     def normalize_amount(cls, value: Any) -> Decimal:
         return normalize_decimal(value)
-

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Uuid
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,7 +14,7 @@ from app.shared.enums import EstadoWallet, MonedaWallet, TipoWallet
 class Wallet(Base):
     __tablename__ = "wallets"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4, index=True)
     alias: Mapped[str | None] = mapped_column(String(80))
     tipo: Mapped[TipoWallet] = mapped_column(
         Enum(
@@ -46,8 +46,8 @@ class Wallet(Base):
     saldo: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0.00"))
     limite_operacion: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     es_principal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
-    organizacion_id: Mapped[uuid.UUID] = mapped_column(
+    usuario_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
+    organizacion_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("organizaciones.id", ondelete="RESTRICT"),
         nullable=False,
@@ -73,4 +73,3 @@ class Wallet(Base):
         foreign_keys="Movimiento.wallet_destino_id",
         back_populates="wallet_destino",
     )
-

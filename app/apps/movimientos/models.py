@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
+from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Uuid
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,18 +15,20 @@ from app.shared.enums import EstadoMovimiento, TipoMovimiento
 class Movimiento(Base):
     __tablename__ = "movimientos"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    wallet_origen_id: Mapped[int] = mapped_column(
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4, index=True)
+    wallet_origen_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("wallets.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
-    wallet_destino_id: Mapped[int] = mapped_column(
+    wallet_destino_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("wallets.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
-    organizacion_id: Mapped[uuid.UUID] = mapped_column(
+    organizacion_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("organizaciones.id", ondelete="RESTRICT"),
         nullable=False,
@@ -53,7 +55,11 @@ class Movimiento(Base):
     descripcion: Mapped[str | None] = mapped_column(String(255))
     referencia_externa: Mapped[str | None] = mapped_column(String(120), index=True)
     metadata_movimiento: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
-    movimiento_origen_id: Mapped[int | None] = mapped_column(ForeignKey("movimientos.id"), index=True)
+    movimiento_origen_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("movimientos.id"),
+        index=True,
+    )
     es_reversa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     motivo_reversa: Mapped[str | None] = mapped_column(String(255))
     fecha: Mapped[datetime] = mapped_column(
@@ -72,4 +78,3 @@ class Movimiento(Base):
         back_populates="movimientos_destino",
     )
     movimiento_origen: Mapped["Movimiento | None"] = relationship(remote_side=[id])
-

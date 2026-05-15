@@ -27,7 +27,7 @@ class WalletCreate(BaseModel):
     moneda: MonedaWallet = MonedaWallet.ARS
     limite_operacion: Decimal | None = None
     es_principal: bool = False
-    usuario_id: int | None = Field(default=None, gt=0)
+    usuario_id: UUID | None = None
     organizacion_id: UUID | None = None
 
     @field_validator("limite_operacion", mode="before")
@@ -55,7 +55,7 @@ class WalletEstadoUpdate(BaseModel):
 class WalletResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     alias: str | None = None
     tipo: TipoWallet
     estado: EstadoWallet
@@ -63,7 +63,7 @@ class WalletResponse(BaseModel):
     saldo: Decimal
     limite_operacion: Decimal | None = None
     es_principal: bool
-    usuario_id: int
+    usuario_id: UUID
     organizacion_id: UUID
     fecha_creacion: datetime
     fecha_actualizacion: datetime | None = None
@@ -77,15 +77,14 @@ class WalletResponse(BaseModel):
 class WalletBalanceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     saldo: Decimal
     moneda: MonedaWallet
     estado: EstadoWallet
-    usuario_id: int
+    usuario_id: UUID
     organizacion_id: UUID
 
     @field_validator("saldo", mode="before")
     @classmethod
     def normalize_balance(cls, value: Any) -> Decimal:
         return _normalize_amount(value, allow_zero=True) or Decimal("0.00")
-

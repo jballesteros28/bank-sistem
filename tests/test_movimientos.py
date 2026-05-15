@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -7,7 +8,7 @@ from app.shared.enums import RolUsuario
 from tests.conftest import api_data, auth_headers, create_org, create_user, create_wallet
 
 
-def _balance(client: TestClient, headers: dict[str, str], wallet_id: int) -> Decimal:
+def _balance(client: TestClient, headers: dict[str, str], wallet_id: UUID) -> Decimal:
     response = client.get(f"/api/v1/wallets/{wallet_id}/balance", headers=headers)
     assert response.status_code == 200, response.text
     return Decimal(api_data(response)["saldo"])
@@ -29,7 +30,7 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
     deposito = client.post(
         "/api/v1/movimientos/deposito",
         headers=admin_headers,
-        json={"wallet_destino_id": origen.id, "monto": "100.00"},
+        json={"wallet_destino_id": str(origen.id), "monto": "100.00"},
     )
     assert deposito.status_code == 201, deposito.text
     assert _balance(client, emisor_headers, origen.id) == Decimal("100.00")
@@ -37,7 +38,7 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
     transferencia = client.post(
         "/api/v1/movimientos/transferencia",
         headers=emisor_headers,
-        json={"wallet_origen_id": origen.id, "wallet_destino_id": destino.id, "monto": "30.00"},
+        json={"wallet_origen_id": str(origen.id), "wallet_destino_id": str(destino.id), "monto": "30.00"},
     )
     assert transferencia.status_code == 201, transferencia.text
     movimiento_id = api_data(transferencia)["id"]
@@ -46,7 +47,7 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
     retiro = client.post(
         "/api/v1/movimientos/retiro",
         headers=emisor_headers,
-        json={"wallet_origen_id": origen.id, "monto": "20.00"},
+        json={"wallet_origen_id": str(origen.id), "monto": "20.00"},
     )
     assert retiro.status_code == 201, retiro.text
     assert _balance(client, emisor_headers, origen.id) == Decimal("50.00")
@@ -72,8 +73,94 @@ def test_bloquea_movimientos_cross_organization(client: TestClient, db_session: 
     response = client.post(
         "/api/v1/movimientos/transferencia",
         headers=auth_headers(user_a),
-        json={"wallet_origen_id": origen.id, "wallet_destino_id": destino.id, "monto": "5.00"},
+        json={"wallet_origen_id": str(origen.id), "wallet_destino_id": str(destino.id), "monto": "5.00"},
     )
 
     assert response.status_code == 403
 
+
+def test_soporte_no_puede_crear_deposito(client: TestClient, db_session: Session) -> None:
+    org = create_org(db_session)
+    soporte = create_user(db_session, org, RolUsuario.soporte)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    response = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(soporte),
+        json={"wallet_destino_id": str(wallet.id), "monto": "10.00"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_soporte_no_puede_crear_retiro(client: TestClient, db_session: Session) -> None:
+    org = create_org(db_session)
+    soporte = create_user(db_session, org, RolUsuario.soporte)
+    wallet = create_wallet(db_session, soporte, saldo=Decimal("10.00"))
+
+    response = client.post(
+        "/api/v1/movimientos/retiro",
+        headers=auth_headers(soporte),
+        json={"wallet_origen_id": str(wallet.id), "monto": "5.00"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_soporte_no_puede_crear_cashback(client: TestClient, db_session: Session) -> None:
+    org = create_org(db_session)
+    soporte = create_user(db_session, org, RolUsuario.soporte)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    response = client.post(
+        "/api/v1/movimientos/cashback",
+        headers=auth_headers(soporte),
+        json={"wallet_destino_id": str(wallet.id), "monto": "3.00"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_soporte_no_puede_crear_ajuste_admin(client: TestClient, db_session: Session) -> None:
+    org = create_org(db_session)
+    soporte = create_user(db_session, org, RolUsuario.soporte)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    response = client.post(
+        "/api/v1/movimientos/ajuste-admin",
+        headers=auth_headers(soporte),
+        json={
+            "wallet_destino_id": str(wallet.id),
+            "monto": "7.00",
+            "operacion": "credito",
+            "motivo": "control operativo",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_soporte_puede_consultar_movimientos_de_su_organizacion(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    soporte = create_user(db_session, org, RolUsuario.soporte)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    created = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "11.00"},
+    )
+    assert created.status_code == 201, created.text
+
+    listed = client.get("/api/v1/movimientos", headers=auth_headers(soporte))
+
+    assert listed.status_code == 200, listed.text
+    assert [movimiento["tipo"] for movimiento in api_data(listed)] == ["deposito"]

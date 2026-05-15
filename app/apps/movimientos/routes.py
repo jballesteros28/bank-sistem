@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
+from app.apps.notificaciones.services import notificar_movimiento
 from app.apps.movimientos.schemas import (
     MovimientoAjusteAdminCreate,
     MovimientoCashbackCreate,
@@ -36,65 +37,86 @@ router = APIRouter(prefix="/movimientos", tags=["Movimientos"])
 @router.post("/deposito", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_deposito(
     datos: MovimientoDepositoCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_deposito(datos, current_user, db), "Deposito creado correctamente.")
+    movimiento = crear_deposito(datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Deposito creado correctamente.")
 
 
 @router.post("/retiro", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_retiro(
     datos: MovimientoRetiroCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_retiro(datos, current_user, db), "Retiro creado correctamente.")
+    movimiento = crear_retiro(datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Retiro creado correctamente.")
 
 
 @router.post("/transferencia", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_transferencia(
     datos: MovimientoTransferenciaCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_transferencia(datos, current_user, db), "Transferencia creada correctamente.")
+    movimiento = crear_transferencia(datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Transferencia creada correctamente.")
 
 
 @router.post("/pago", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_pago(
     datos: MovimientoPagoCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_pago(datos, current_user, db), "Pago creado correctamente.")
+    movimiento = crear_pago(datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Pago creado correctamente.")
 
 
 @router.post("/cashback", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_cashback(
     datos: MovimientoCashbackCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_cashback(datos, current_user, db), "Cashback creado correctamente.")
+    movimiento = crear_cashback(datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Cashback creado correctamente.")
 
 
 @router.post("/ajuste-admin", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_ajuste_admin(
     datos: MovimientoAjusteAdminCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_ajuste_admin(datos, current_user, db), "Ajuste administrativo creado correctamente.")
+    movimiento = crear_ajuste_admin(datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Ajuste administrativo creado correctamente.")
 
 
 @router.post("/{movimiento_id}/reversa", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_reversa(
-    movimiento_id: int,
+    movimiento_id: UUID,
     datos: MovimientoReversaCreate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    return ok(crear_reversa(movimiento_id, datos, current_user, db), "Reversa creada correctamente.")
+    movimiento = crear_reversa(movimiento_id, datos, current_user, db)
+    notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Reversa creada correctamente.")
 
 
 @router.get("", response_model=ApiResponse[list[MovimientoResponse]])
@@ -113,9 +135,8 @@ def get_movimientos(
 
 @router.get("/{movimiento_id}", response_model=ApiResponse[MovimientoResponse])
 def get_movimiento(
-    movimiento_id: int,
+    movimiento_id: UUID,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
     return ok(obtener_movimiento(movimiento_id, current_user, db), "Movimiento obtenido correctamente.")
-

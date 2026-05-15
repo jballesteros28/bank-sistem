@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
+from app.apps.notificaciones.services import notificar_organizacion_suspendida
 from app.apps.organizaciones.branding_service import (
     actualizar_branding_organizacion,
     obtener_branding_organizacion,
@@ -110,10 +111,10 @@ def get_organizacion(
 def patch_organizacion(
     organizacion_id: UUID,
     datos: OrganizacionUpdate,
+    background_tasks: BackgroundTasks,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[OrganizacionResponse]:
-    return ok(
-        actualizar_organizacion(organizacion_id, datos, current_user, db),
-        "Organizacion actualizada correctamente.",
-    )
+    organizacion = actualizar_organizacion(organizacion_id, datos, current_user, db)
+    notificar_organizacion_suspendida(organizacion.id, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(organizacion, "Organizacion actualizada correctamente.")

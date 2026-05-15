@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from app.apps.auth.schemas import DatosUsuarioToken
 from app.apps.usuarios.models import Usuario
@@ -20,7 +21,7 @@ def get_current_user(
 ) -> DatosUsuarioToken:
     try:
         payload = decode_access_token(token)
-        user_id = int(payload["sub"])
+        user_id = UUID(str(payload["sub"]))
     except (KeyError, TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -57,4 +58,3 @@ def get_current_super_admin(
     if not is_super_admin(current_user.rol):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso restringido a super_admin.")
     return current_user
-

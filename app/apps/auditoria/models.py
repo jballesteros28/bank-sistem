@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Uuid
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -13,12 +13,12 @@ from app.core.database import Base
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4, index=True)
     evento: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     mensaje: Mapped[str] = mapped_column(String(500), nullable=False)
     nivel: Mapped[str] = mapped_column(String(20), nullable=False, default="INFO")
-    actor_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
-    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+    actor_usuario_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("usuarios.id"))
+    organizacion_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("organizaciones.id"),
         index=True,
@@ -32,3 +32,5 @@ class AuditLog(Base):
         nullable=False,
     )
 
+    actor_usuario: Mapped["Usuario | None"] = relationship(back_populates="audit_logs")
+    organizacion: Mapped["Organizacion | None"] = relationship(back_populates="audit_logs")

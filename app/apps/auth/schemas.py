@@ -31,9 +31,8 @@ class TokenRespuesta(BaseModel):
 
 
 class DatosUsuarioToken(BaseModel):
-    id: int
+    id: UUID
     email: EmailStr
     nombre: str
     rol: RolUsuario
     organizacion_id: UUID | None = None
-

@@ -54,14 +54,26 @@ class EstadoMovimiento(StrEnum):
 
 
 class TipoNotificacion(StrEnum):
-    bienvenida = "bienvenida"
-    movimiento = "movimiento"
+    onboarding_exitoso = "onboarding_exitoso"
+    wallet_creada = "wallet_creada"
+    movimiento_deposito = "movimiento_deposito"
+    movimiento_retiro = "movimiento_retiro"
+    movimiento_transferencia = "movimiento_transferencia"
+    movimiento_pago = "movimiento_pago"
+    movimiento_cashback = "movimiento_cashback"
+    movimiento_ajuste_admin = "movimiento_ajuste_admin"
+    movimiento_reversa = "movimiento_reversa"
+    wallet_congelada = "wallet_congelada"
+    organizacion_suspendida = "organizacion_suspendida"
     seguridad = "seguridad"
-    generica = "generica"
+
+
+class CanalNotificacion(StrEnum):
+    interna = "interna"
+    email = "email"
 
 
 class EstadoNotificacion(StrEnum):
     queued = "queued"
     sent = "sent"
     failed = "failed"
-

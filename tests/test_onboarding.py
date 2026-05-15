@@ -23,6 +23,7 @@ def test_onboarding_crea_organizacion_owner_y_wallet_principal(
     assert data["owner"]["rol"] == "owner"
     assert data["wallet_principal"]["es_principal"] is True
     assert data["wallet_principal"]["saldo"] == "0.00"
+    assert data["wallet_principal"]["usuario_id"] == data["owner"]["id"]
 
     organizacion = db_session.get(Organizacion, UUID(data["organizacion"]["id"]))
     assert organizacion is not None
@@ -31,5 +32,5 @@ def test_onboarding_crea_organizacion_owner_y_wallet_principal(
     assert organizacion.moneda_default == "ARS"
     assert organizacion.timezone == "America/Argentina/Buenos_Aires"
     assert db_session.get(Plan, organizacion.plan_id).codigo == "free"
-    assert db_session.get(Usuario, data["owner"]["id"]) is not None
-    assert db_session.get(Wallet, data["wallet_principal"]["id"]) is not None
+    assert db_session.get(Usuario, UUID(data["owner"]["id"])) is not None
+    assert db_session.get(Wallet, UUID(data["wallet_principal"]["id"])) is not None

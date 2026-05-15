@@ -59,6 +59,18 @@ Los tests usan una base aislada de test configurada en `tests/conftest.py`; no d
 
 Si `psycopg2` muestra un mensaje con encoding ilegible, verificar primero que PostgreSQL este activo y que usuario, password, base, host y puerto de `DATABASE_URL` sean correctos. No ocultar el error silenciosamente: corregir la configuracion y repetir la migracion.
 
+## IDs publicos
+
+Los IDs publicos principales usan UUID: organizaciones, planes, usuarios, wallets, movimientos, auditoria y notificaciones. En desarrollo se puede resetear la DB local cuando cambie la migracion inicial.
+
+Reset local recomendado:
+
+```bash
+dropdb wallet_saas
+createdb wallet_saas
+python -m alembic upgrade head
+```
+
 ## Comandos
 
 ```bash
@@ -83,6 +95,9 @@ pytest -q
 - `GET /api/v1/admin/resumen`
 - `GET /api/v1/auditoria`
 - `GET /api/v1/notificaciones`
+- `GET /api/v1/notificaciones/no-leidas/count`
+- `PATCH /api/v1/notificaciones/{notificacion_id}/leida`
+- `PATCH /api/v1/notificaciones/marcar-todas-leidas`
 - `GET /api/v1/planes`
 - `GET /api/v1/planes/organizacion/actual`
 - `PATCH /api/v1/planes/organizaciones/{organizacion_id}/cambiar-plan`
@@ -134,3 +149,19 @@ Endpoints principales:
 - `PATCH /api/v1/organizaciones/me/branding`: actualiza el branding de la organizacion actual para `owner` o `admin`.
 - `GET /api/v1/organizaciones/{organizacion_id}/branding`: consulta branding respetando permisos de organizacion.
 - `PATCH /api/v1/organizaciones/{organizacion_id}/branding`: actualiza branding; `super_admin` puede operar cualquier organizacion.
+
+## Notificaciones y emails
+
+El backend genera notificaciones internas para eventos reales del SaaS: onboarding exitoso, wallets creadas o congeladas, movimientos y suspension de organizaciones. Los clientes ven sus propias notificaciones; `owner` y `admin` ven las de su organizacion; `super_admin` puede consultar globalmente.
+
+Los emails de evento se crean como notificaciones de canal `email` y se agendan con `BackgroundTasks` despues de completar la operacion principal. Un error de email no debe romper la creacion de la organizacion, wallet o movimiento.
+
+Configurar `EMAILS_ENABLED=true` junto con `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_SERVER`, `MAIL_PORT`, `MAIL_STARTTLS` y `MAIL_SSL_TLS` para habilitar envios reales. Con `EMAILS_ENABLED=false`, o en ambiente `test`, el modo silencioso evita envios reales.
+
+Endpoints principales:
+
+- `GET /api/v1/notificaciones`: lista notificaciones internas segun permisos.
+- `GET /api/v1/notificaciones/no-leidas/count`: muestra la cantidad de notificaciones no leidas.
+- `PATCH /api/v1/notificaciones/{notificacion_id}/leida`: marca una notificacion como leida.
+- `PATCH /api/v1/notificaciones/marcar-todas-leidas`: marca todas las notificaciones visibles como leidas.
+- `GET /api/v1/notificaciones/organizacion`: vista administrativa por organizacion.

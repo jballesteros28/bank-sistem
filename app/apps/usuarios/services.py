@@ -75,7 +75,7 @@ def listar_usuarios(
     return [UsuarioResponse.model_validate(usuario) for usuario in db.scalars(query).all()]
 
 
-def obtener_usuario(usuario_id: int, current_user: DatosUsuarioToken, db: Session) -> UsuarioResponse:
+def obtener_usuario(usuario_id: UUID, current_user: DatosUsuarioToken, db: Session) -> UsuarioResponse:
     usuario = db.get(Usuario, usuario_id)
     if usuario is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
@@ -87,7 +87,7 @@ def obtener_usuario(usuario_id: int, current_user: DatosUsuarioToken, db: Sessio
 
 
 def actualizar_usuario(
-    usuario_id: int,
+    usuario_id: UUID,
     datos: UsuarioUpdate,
     current_user: DatosUsuarioToken,
     db: Session,

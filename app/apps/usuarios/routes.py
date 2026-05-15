@@ -34,7 +34,7 @@ def get_usuarios(
 
 @router.get("/{usuario_id}", response_model=ApiResponse[UsuarioResponse])
 def get_usuario(
-    usuario_id: int,
+    usuario_id: UUID,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UsuarioResponse]:
@@ -43,10 +43,9 @@ def get_usuario(
 
 @router.patch("/{usuario_id}", response_model=ApiResponse[UsuarioResponse])
 def patch_usuario(
-    usuario_id: int,
+    usuario_id: UUID,
     datos: UsuarioUpdate,
     current_user: DatosUsuarioToken = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[UsuarioResponse]:
     return ok(actualizar_usuario(usuario_id, datos, current_user, db), "Usuario actualizado correctamente.")
-
