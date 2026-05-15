@@ -24,7 +24,7 @@ from app.apps.wallets.models import Wallet
 from app.core.database import Base, assert_test_database_url, get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.shared.enums import EstadoOrganizacion, EstadoWallet, MonedaWallet, RolUsuario, TipoWallet
+from app.shared.enums import EstadoOrganizacion, EstadoWallet, MonedaWallet, OwnerTypeWallet, RolUsuario, TipoWallet
 
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
@@ -134,8 +134,38 @@ def create_wallet(
         estado=estado,
         saldo=saldo,
         es_principal=es_principal,
+        owner_type=OwnerTypeWallet.usuario,
         usuario_id=user.id,
+        organizacion_owner_id=None,
         organizacion_id=user.organizacion_id,
+    )
+    db.add(wallet)
+    db.commit()
+    db.refresh(wallet)
+    return wallet
+
+
+def create_org_wallet(
+    db: Session,
+    org: Organizacion,
+    *,
+    saldo: Decimal = Decimal("0.00"),
+    moneda: MonedaWallet = MonedaWallet.ARS,
+    estado: EstadoWallet = EstadoWallet.activa,
+    es_principal: bool = False,
+    tipo: TipoWallet = TipoWallet.empresa,
+) -> Wallet:
+    wallet = Wallet(
+        alias=f"Wallet Org {uuid4().hex[:6]}",
+        tipo=tipo,
+        moneda=moneda,
+        estado=estado,
+        saldo=saldo,
+        es_principal=es_principal,
+        owner_type=OwnerTypeWallet.organizacion,
+        usuario_id=None,
+        organizacion_owner_id=org.id,
+        organizacion_id=org.id,
     )
     db.add(wallet)
     db.commit()

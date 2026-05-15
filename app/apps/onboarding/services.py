@@ -13,8 +13,17 @@ from app.apps.usuarios.schemas import UsuarioResponse
 from app.apps.wallets.models import Wallet
 from app.apps.wallets.schemas import WalletResponse
 from app.core.security import hash_password
-from app.shared.enums import EstadoOrganizacion, EstadoWallet, MonedaWallet, RolUsuario, TipoWallet
+from app.shared.enums import EstadoOrganizacion, EstadoWallet, MonedaWallet, OwnerTypeWallet, RolUsuario, TipoWallet
 from app.shared.utils import normalize_email
+
+
+def _moneda_default(value: str | None) -> MonedaWallet:
+    if value is None:
+        return MonedaWallet.ARS
+    try:
+        return MonedaWallet(value)
+    except ValueError:
+        return MonedaWallet.ARS
 
 
 def registrar_organizacion_con_owner(
@@ -61,22 +70,39 @@ def registrar_organizacion_con_owner(
         db.add(owner)
         db.flush()
 
+        moneda_default = _moneda_default(organizacion.moneda_default)
         wallet_principal = Wallet(
             alias="Wallet principal",
             tipo=TipoWallet.principal,
             estado=EstadoWallet.activa,
-            moneda=MonedaWallet.ARS,
+            moneda=moneda_default,
             saldo=Decimal("0.00"),
             limite_operacion=None,
             es_principal=True,
+            owner_type=OwnerTypeWallet.usuario,
             usuario_id=owner.id,
+            organizacion_owner_id=None,
             organizacion_id=organizacion.id,
         )
-        db.add(wallet_principal)
+        wallet_organizacion = Wallet(
+            alias="Wallet empresa",
+            tipo=TipoWallet.empresa,
+            estado=EstadoWallet.activa,
+            moneda=moneda_default,
+            saldo=Decimal("0.00"),
+            limite_operacion=None,
+            es_principal=True,
+            owner_type=OwnerTypeWallet.organizacion,
+            usuario_id=None,
+            organizacion_owner_id=organizacion.id,
+            organizacion_id=organizacion.id,
+        )
+        db.add_all([wallet_principal, wallet_organizacion])
         db.commit()
         db.refresh(organizacion)
         db.refresh(owner)
         db.refresh(wallet_principal)
+        db.refresh(wallet_organizacion)
     except Exception:
         db.rollback()
         raise
@@ -85,4 +111,5 @@ def registrar_organizacion_con_owner(
         organizacion=OrganizacionResponse.model_validate(organizacion),
         owner=UsuarioResponse.model_validate(owner),
         wallet_principal=WalletResponse.model_validate(wallet_principal),
+        wallet_organizacion_principal=WalletResponse.model_validate(wallet_organizacion),
     )

@@ -6,6 +6,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.apps.auditoria.schemas import AuditLogCreate
+from app.apps.auditoria.services import registrar_audit_log
 from app.apps.auth.schemas import DatosUsuarioToken
 from app.apps.movimientos.models import Movimiento
 from app.apps.movimientos.permissions import ensure_can_debit_wallet
@@ -13,6 +15,7 @@ from app.apps.movimientos.schemas import (
     MovimientoAjusteAdminCreate,
     MovimientoCashbackCreate,
     MovimientoDepositoCreate,
+    MovimientoPagoOrganizacionCreate,
     MovimientoPagoCreate,
     MovimientoResponse,
     MovimientoRetiroCreate,
@@ -22,7 +25,7 @@ from app.apps.movimientos.schemas import (
 from app.apps.planes.limit_service import validar_limite_movimientos_mes
 from app.apps.wallets.models import Wallet
 from app.core.permissions import can_consult_financial_info, is_financial_operator, is_super_admin
-from app.shared.enums import EstadoMovimiento, EstadoWallet, TipoMovimiento
+from app.shared.enums import EstadoMovimiento, EstadoWallet, OwnerTypeWallet, RolUsuario, TipoMovimiento
 from app.shared.utils import normalize_decimal
 
 
@@ -227,6 +230,77 @@ def crear_transferencia(
 
 def crear_pago(datos: MovimientoPagoCreate, current_user: DatosUsuarioToken, db: Session) -> MovimientoResponse:
     return _crear_entre_wallets(datos, current_user, db, TipoMovimiento.pago)
+
+
+def _audit_pago_organizacion(
+    movimiento: MovimientoResponse,
+    current_user: DatosUsuarioToken,
+    db: Session,
+) -> None:
+    try:
+        registrar_audit_log(
+            AuditLogCreate(
+                evento="pago_organizacion_realizado",
+                mensaje="Pago a organizacion registrado.",
+                actor_usuario_id=current_user.id,
+                organizacion_id=movimiento.organizacion_id,
+                metadata={
+                    "movimiento_id": str(movimiento.id),
+                    "wallet_origen_id": str(movimiento.wallet_origen_id),
+                    "wallet_destino_id": str(movimiento.wallet_destino_id),
+                    "monto": str(movimiento.monto),
+                },
+            ),
+            db,
+        )
+    except Exception:
+        db.rollback()
+
+
+def crear_pago_a_organizacion(
+    datos: MovimientoPagoOrganizacionCreate,
+    current_user: DatosUsuarioToken,
+    db: Session,
+) -> MovimientoResponse:
+    if str(current_user.rol) == RolUsuario.soporte.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operacion restringida a operadores.")
+
+    amount = _amount(datos.monto)
+    origen = _get_wallet_locked(db, datos.wallet_origen_id, "origen")
+    destino = _get_wallet_locked(db, datos.wallet_destino_id, "destino")
+    if origen.id == destino.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede operar sobre la misma wallet.")
+
+    organization_id = _ensure_same_organization([origen, destino], current_user)
+    if origen.owner_type != OwnerTypeWallet.usuario or origen.usuario_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La wallet origen debe ser de usuario.")
+    if destino.owner_type != OwnerTypeWallet.organizacion or destino.organizacion_owner_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La wallet destino debe ser de organizacion.")
+
+    _ensure_active(origen, "origen")
+    _ensure_active(destino, "destino")
+    ensure_can_debit_wallet(current_user, origen)
+    _ensure_same_currency(origen, destino)
+    _ensure_limit(origen, amount)
+    _ensure_balance(origen, amount)
+
+    origen.saldo = _amount(origen.saldo) - amount
+    destino.saldo = _amount(destino.saldo) + amount
+    movimiento = _create_movement(
+        db,
+        origen=origen,
+        destino=destino,
+        amount=amount,
+        tipo=TipoMovimiento.pago,
+        organization_id=organization_id,
+        descripcion=datos.descripcion,
+        referencia_externa=datos.referencia_externa,
+        metadata=datos.metadata,
+    )
+    db.add_all([origen, destino])
+    response = _commit(db, movimiento)
+    _audit_pago_organizacion(response, current_user, db)
+    return response
 
 
 def crear_cashback(datos: MovimientoCashbackCreate, current_user: DatosUsuarioToken, db: Session) -> MovimientoResponse:

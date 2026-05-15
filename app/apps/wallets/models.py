@@ -4,15 +4,25 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, Uuid
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.shared.enums import EstadoWallet, MonedaWallet, TipoWallet
+from app.shared.enums import EstadoWallet, MonedaWallet, OwnerTypeWallet, TipoWallet
 
 
 class Wallet(Base):
     __tablename__ = "wallets"
+    __table_args__ = (
+        CheckConstraint(
+            "("
+            "owner_type = 'usuario' AND usuario_id IS NOT NULL AND organizacion_owner_id IS NULL"
+            ") OR ("
+            "owner_type = 'organizacion' AND organizacion_owner_id IS NOT NULL AND usuario_id IS NULL"
+            ")",
+            name="ck_wallet_owner_consistency",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4, index=True)
     alias: Mapped[str | None] = mapped_column(String(80))
@@ -46,7 +56,25 @@ class Wallet(Base):
     saldo: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0.00"))
     limite_operacion: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     es_principal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    usuario_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
+    owner_type: Mapped[OwnerTypeWallet] = mapped_column(
+        Enum(
+            OwnerTypeWallet,
+            name="owner_type_wallet",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=OwnerTypeWallet.usuario,
+    )
+    usuario_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    organizacion_owner_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizaciones.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     organizacion_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("organizaciones.id", ondelete="RESTRICT"),
@@ -63,8 +91,14 @@ class Wallet(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    usuario: Mapped["Usuario"] = relationship(back_populates="wallets")
-    organizacion: Mapped["Organizacion"] = relationship(back_populates="wallets")
+    usuario: Mapped["Usuario | None"] = relationship(back_populates="wallets")
+    organizacion: Mapped["Organizacion"] = relationship(
+        back_populates="wallets",
+        foreign_keys=[organizacion_id],
+    )
+    organizacion_owner: Mapped["Organizacion | None"] = relationship(
+        foreign_keys=[organizacion_owner_id],
+    )
     movimientos_origen: Mapped[list["Movimiento"]] = relationship(
         foreign_keys="Movimiento.wallet_origen_id",
         back_populates="wallet_origen",

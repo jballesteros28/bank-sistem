@@ -5,11 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
-from app.apps.notificaciones.services import notificar_wallet_congelada, notificar_wallet_creada
+from app.apps.notificaciones.services import (
+    notificar_wallet_congelada,
+    notificar_wallet_creada,
+    notificar_wallet_organizacion_creada,
+)
 from app.apps.wallets.schemas import (
     WalletBalanceResponse,
     WalletCreate,
     WalletEstadoUpdate,
+    WalletOrganizacionCreate,
     WalletResponse,
     WalletUpdate,
 )
@@ -18,9 +23,12 @@ from app.apps.wallets.services import (
     cambiar_estado_wallet,
     cerrar_wallet,
     crear_wallet,
+    crear_wallet_organizacion,
     listar_wallets,
+    listar_wallets_organizacion,
     obtener_balance,
     obtener_wallet,
+    obtener_wallet_principal_organizacion,
 )
 from app.core.database import get_db
 from app.shared.responses import ApiResponse, ok
@@ -41,6 +49,18 @@ def post_wallet(
     return ok(wallet, "Wallet creada correctamente.")
 
 
+@router.post("/organizacion", response_model=ApiResponse[WalletResponse], status_code=status.HTTP_201_CREATED)
+def post_wallet_organizacion(
+    datos: WalletOrganizacionCreate,
+    background_tasks: BackgroundTasks,
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[WalletResponse]:
+    wallet = crear_wallet_organizacion(datos, current_user, db)
+    notificar_wallet_organizacion_creada(wallet, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(wallet, "Wallet de organizacion creada correctamente.")
+
+
 @router.get("", response_model=ApiResponse[list[WalletResponse]])
 def get_wallets(
     usuario_id: UUID | None = Query(default=None),
@@ -49,6 +69,30 @@ def get_wallets(
     db: Session = Depends(get_db),
 ) -> ApiResponse[list[WalletResponse]]:
     return ok(listar_wallets(current_user, db, usuario_id, organizacion_id), "Wallets obtenidas correctamente.")
+
+
+@router.get("/organizacion", response_model=ApiResponse[list[WalletResponse]])
+def get_wallets_organizacion(
+    organizacion_id: UUID | None = Query(default=None),
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[WalletResponse]]:
+    return ok(
+        listar_wallets_organizacion(current_user, db, organizacion_id),
+        "Wallets de organizacion obtenidas correctamente.",
+    )
+
+
+@router.get("/organizacion/principal", response_model=ApiResponse[WalletResponse])
+def get_wallet_organizacion_principal(
+    organizacion_id: UUID | None = Query(default=None),
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[WalletResponse]:
+    return ok(
+        obtener_wallet_principal_organizacion(current_user, db, organizacion_id),
+        "Wallet principal de organizacion obtenida correctamente.",
+    )
 
 
 @router.get("/{wallet_id}", response_model=ApiResponse[WalletResponse])

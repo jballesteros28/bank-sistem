@@ -25,7 +25,17 @@ rol_usuario = postgresql.ENUM(
 estado_organizacion = postgresql.ENUM(
     "activa", "inactiva", "suspendida", name="estado_organizacion", create_type=False
 )
-tipo_wallet = postgresql.ENUM("principal", "ahorro", "empresa", "recompensas", name="tipo_wallet", create_type=False)
+tipo_wallet = postgresql.ENUM(
+    "principal",
+    "ahorro",
+    "empresa",
+    "operativa",
+    "caja",
+    "recompensas",
+    name="tipo_wallet",
+    create_type=False,
+)
+owner_type_wallet = postgresql.ENUM("usuario", "organizacion", name="owner_type_wallet", create_type=False)
 estado_wallet = postgresql.ENUM(
     "activa", "inactiva", "congelada", "cerrada", name="estado_wallet", create_type=False
 )
@@ -55,6 +65,9 @@ tipo_notificacion = postgresql.ENUM(
     "movimiento_ajuste_admin",
     "movimiento_reversa",
     "wallet_congelada",
+    "wallet_organizacion_creada",
+    "pago_organizacion_realizado",
+    "pago_organizacion_recibido",
     "organizacion_suspendida",
     "seguridad",
     name="tipo_notificacion",
@@ -74,6 +87,7 @@ def upgrade() -> None:
     rol_usuario.create(bind, checkfirst=True)
     estado_organizacion.create(bind, checkfirst=True)
     tipo_wallet.create(bind, checkfirst=True)
+    owner_type_wallet.create(bind, checkfirst=True)
     estado_wallet.create(bind, checkfirst=True)
     moneda_wallet.create(bind, checkfirst=True)
     tipo_movimiento.create(bind, checkfirst=True)
@@ -160,11 +174,22 @@ def upgrade() -> None:
         sa.Column("saldo", sa.Numeric(18, 2), nullable=False),
         sa.Column("limite_operacion", sa.Numeric(18, 2), nullable=True),
         sa.Column("es_principal", sa.Boolean(), nullable=False),
-        sa.Column("usuario_id", uuid_pk, nullable=False),
+        sa.Column("owner_type", owner_type_wallet, nullable=False),
+        sa.Column("usuario_id", uuid_pk, nullable=True),
+        sa.Column("organizacion_owner_id", uuid_pk, nullable=True),
         sa.Column("organizacion_id", uuid_pk, nullable=False),
         sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
         sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "("
+            "owner_type = 'usuario' AND usuario_id IS NOT NULL AND organizacion_owner_id IS NULL"
+            ") OR ("
+            "owner_type = 'organizacion' AND organizacion_owner_id IS NOT NULL AND usuario_id IS NULL"
+            ")",
+            name="ck_wallet_owner_consistency",
+        ),
         sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["organizacion_owner_id"], ["organizaciones.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["usuario_id"], ["usuarios.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -261,6 +286,7 @@ def downgrade() -> None:
     tipo_movimiento.drop(bind, checkfirst=True)
     moneda_wallet.drop(bind, checkfirst=True)
     estado_wallet.drop(bind, checkfirst=True)
+    owner_type_wallet.drop(bind, checkfirst=True)
     tipo_wallet.drop(bind, checkfirst=True)
     estado_organizacion.drop(bind, checkfirst=True)
     rol_usuario.drop(bind, checkfirst=True)

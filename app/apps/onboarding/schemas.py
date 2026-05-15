@@ -38,4 +38,4 @@ class OnboardingRegistroResponse(BaseModel):
     organizacion: OrganizacionResponse
     owner: UsuarioResponse
     wallet_principal: WalletResponse
-
+    wallet_organizacion_principal: WalletResponse

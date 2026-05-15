@@ -55,7 +55,10 @@ class Organizacion(Base):
     )
 
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="organizacion")
-    wallets: Mapped[list["Wallet"]] = relationship(back_populates="organizacion")
+    wallets: Mapped[list["Wallet"]] = relationship(
+        back_populates="organizacion",
+        foreign_keys="Wallet.organizacion_id",
+    )
     movimientos: Mapped[list["Movimiento"]] = relationship(back_populates="organizacion")
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="organizacion")
     notificaciones: Mapped[list["Notificacion"]] = relationship(back_populates="organizacion")

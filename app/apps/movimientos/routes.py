@@ -5,11 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
-from app.apps.notificaciones.services import notificar_movimiento
+from app.apps.notificaciones.services import notificar_movimiento, notificar_pago_organizacion
 from app.apps.movimientos.schemas import (
     MovimientoAjusteAdminCreate,
     MovimientoCashbackCreate,
     MovimientoDepositoCreate,
+    MovimientoPagoOrganizacionCreate,
     MovimientoPagoCreate,
     MovimientoResponse,
     MovimientoRetiroCreate,
@@ -21,6 +22,7 @@ from app.apps.movimientos.services import (
     crear_cashback,
     crear_deposito,
     crear_pago,
+    crear_pago_a_organizacion,
     crear_retiro,
     crear_reversa,
     crear_transferencia,
@@ -80,6 +82,18 @@ def post_pago(
     movimiento = crear_pago(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
     return ok(movimiento, "Pago creado correctamente.")
+
+
+@router.post("/pago-organizacion", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
+def post_pago_organizacion(
+    datos: MovimientoPagoOrganizacionCreate,
+    background_tasks: BackgroundTasks,
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MovimientoResponse]:
+    movimiento = crear_pago_a_organizacion(datos, current_user, db)
+    notificar_pago_organizacion(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    return ok(movimiento, "Pago a organizacion creado correctamente.")
 
 
 @router.post("/cashback", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)

@@ -88,9 +88,14 @@ pytest -q
 - `GET /api/v1/organizaciones`
 - `GET /api/v1/usuarios`
 - `GET /api/v1/wallets`
+- `POST /api/v1/wallets/organizacion`
+- `GET /api/v1/wallets/organizacion`
+- `GET /api/v1/wallets/organizacion/principal`
 - `POST /api/v1/movimientos/deposito`
 - `POST /api/v1/movimientos/transferencia`
 - `POST /api/v1/movimientos/retiro`
+- `POST /api/v1/movimientos/pago`
+- `POST /api/v1/movimientos/pago-organizacion`
 - `POST /api/v1/movimientos/{movimiento_id}/reversa`
 - `GET /api/v1/admin/resumen`
 - `GET /api/v1/auditoria`
@@ -103,6 +108,54 @@ pytest -q
 - `PATCH /api/v1/planes/organizaciones/{organizacion_id}/cambiar-plan`
 - `GET /api/v1/organizaciones/me/branding`
 - `PATCH /api/v1/organizaciones/me/branding`
+
+## Wallets
+
+El SaaS maneja wallets internas por organizacion. No es banco, no custodia dinero real inicialmente y no reintroduce lenguaje financiero legacy. Las wallets representan saldos internos, puntos, cashback, caja operativa y pagos dentro de cada organizacion.
+
+Cada wallet tiene `owner_type`:
+
+- `usuario`: la wallet pertenece a un usuario. Usa `usuario_id` y deja `organizacion_owner_id=NULL`.
+- `organizacion`: la wallet pertenece a la organizacion. Usa `organizacion_owner_id` y deja `usuario_id=NULL`.
+
+`organizacion_id` siempre existe y define el aislamiento multi-tenant. El backend lo resuelve desde el usuario autenticado, o desde la organizacion gestionada cuando opera un `super_admin`; el frontend no es fuente confiable para ese dato.
+
+Tipos principales:
+
+- Wallets de usuario: `principal`, `ahorro`, `recompensas`.
+- Wallets de organizacion: `empresa`, `operativa`, `caja`, `recompensas`.
+
+Casos soportados:
+
+- Pagos internos desde usuarios hacia la organizacion.
+- Caja y saldo operativo de la organizacion.
+- Programas de recompensas, puntos o cashback.
+- Separacion entre saldo de usuarios y saldo propio del comercio, empresa, comunidad o plataforma.
+
+El onboarding crea dos wallets en la misma operacion atomica: la wallet principal del owner y la wallet principal de la organizacion (`Wallet empresa`). La creacion de cualquier wallet consume `limite_wallets` del plan.
+
+Endpoints principales:
+
+- `POST /api/v1/wallets`: crea wallets de usuario.
+- `GET /api/v1/wallets`: lista wallets de usuario visibles segun permisos.
+- `POST /api/v1/wallets/organizacion`: crea wallets de organizacion para `owner`, `admin` o `super_admin`.
+- `GET /api/v1/wallets/organizacion`: lista wallets de organizacion para `owner`, `admin`, `soporte` o `super_admin`.
+- `GET /api/v1/wallets/organizacion/principal`: obtiene la wallet principal de la organizacion.
+
+## Movimientos
+
+Los movimientos registran cambios de saldo internos entre wallets de una misma organizacion. Todo movimiento aprobado consume `limite_movimientos_mes`.
+
+Flujo comercial usuario a organizacion:
+
+1. El usuario paga desde una wallet `owner_type=usuario`.
+2. La wallet destino debe ser `owner_type=organizacion`.
+3. Ambas wallets deben estar activas, pertenecer a la misma organizacion y usar la misma moneda.
+4. El backend debita la wallet del usuario, acredita la wallet de la organizacion, crea el movimiento tipo `pago`, registra auditoria y genera notificaciones.
+
+Endpoint especifico:
+
+- `POST /api/v1/movimientos/pago-organizacion`: pago comercial interno desde usuario hacia organizacion.
 
 ## Planes SaaS
 

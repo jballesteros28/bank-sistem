@@ -47,6 +47,10 @@ class MovimientoPagoCreate(MovimientoTransferenciaCreate):
     pass
 
 
+class MovimientoPagoOrganizacionCreate(MovimientoTransferenciaCreate):
+    pass
+
+
 class MovimientoCashbackCreate(MovimientoBaseCreate):
     wallet_destino_id: UUID
 

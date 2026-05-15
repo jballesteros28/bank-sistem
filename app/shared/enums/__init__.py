@@ -19,7 +19,14 @@ class TipoWallet(StrEnum):
     principal = "principal"
     ahorro = "ahorro"
     empresa = "empresa"
+    operativa = "operativa"
+    caja = "caja"
     recompensas = "recompensas"
+
+
+class OwnerTypeWallet(StrEnum):
+    usuario = "usuario"
+    organizacion = "organizacion"
 
 
 class EstadoWallet(StrEnum):
@@ -64,6 +71,9 @@ class TipoNotificacion(StrEnum):
     movimiento_ajuste_admin = "movimiento_ajuste_admin"
     movimiento_reversa = "movimiento_reversa"
     wallet_congelada = "wallet_congelada"
+    wallet_organizacion_creada = "wallet_organizacion_creada"
+    pago_organizacion_realizado = "pago_organizacion_realizado"
+    pago_organizacion_recibido = "pago_organizacion_recibido"
     organizacion_suspendida = "organizacion_suspendida"
     seguridad = "seguridad"
 

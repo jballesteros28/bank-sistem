@@ -459,7 +459,7 @@ def notificar_wallet_creada(
 ) -> None:
     def _run() -> None:
         organizacion = db.get(Organizacion, wallet.organizacion_id)
-        usuario = db.get(Usuario, wallet.usuario_id)
+        usuario = db.get(Usuario, wallet.usuario_id) if wallet.usuario_id is not None else None
         if organizacion is None or usuario is None:
             return
         crear_notificacion_y_email(
@@ -478,6 +478,63 @@ def notificar_wallet_creada(
     _safe_event(_run)
 
 
+def _usuarios_owner_admin(db: Session, organizacion_id: UUID) -> list[Usuario]:
+    return db.scalars(
+        select(Usuario).where(
+            Usuario.organizacion_id == organizacion_id,
+            or_(Usuario.rol == RolUsuario.owner, Usuario.rol == RolUsuario.admin),
+        )
+    ).all()
+
+
+def notificar_wallet_organizacion_creada(
+    wallet: WalletResponse,
+    db: Session,
+    background_tasks: BackgroundTasks | None,
+    *,
+    actor_usuario_id: UUID | None = None,
+) -> None:
+    def _run() -> None:
+        organizacion = db.get(Organizacion, wallet.organizacion_id)
+        if organizacion is None:
+            return
+        usuarios = _usuarios_owner_admin(db, wallet.organizacion_id)
+        metadata = {
+            "wallet_id": wallet.id,
+            "moneda": wallet.moneda.value,
+            "owner_type": wallet.owner_type.value,
+        }
+        if not usuarios:
+            crear_notificacion_y_email(
+                organizacion=organizacion,
+                usuario=None,
+                tipo=TipoNotificacion.wallet_organizacion_creada,
+                titulo="Wallet de organizacion creada",
+                mensaje=f"Se creo la wallet {wallet.alias or wallet.id} en {wallet.moneda.value}.",
+                template_name="wallet_creada.html",
+                metadata=metadata,
+                db=db,
+                background_tasks=background_tasks,
+                actor_usuario_id=actor_usuario_id,
+            )
+            return
+        for usuario in usuarios:
+            crear_notificacion_y_email(
+                organizacion=organizacion,
+                usuario=usuario,
+                tipo=TipoNotificacion.wallet_organizacion_creada,
+                titulo="Wallet de organizacion creada",
+                mensaje=f"Se creo la wallet {wallet.alias or wallet.id} en {wallet.moneda.value}.",
+                template_name="wallet_creada.html",
+                metadata=metadata,
+                db=db,
+                background_tasks=background_tasks,
+                actor_usuario_id=actor_usuario_id,
+            )
+
+    _safe_event(_run)
+
+
 def notificar_wallet_congelada(
     wallet: WalletResponse,
     db: Session,
@@ -490,7 +547,7 @@ def notificar_wallet_congelada(
 
     def _run() -> None:
         organizacion = db.get(Organizacion, wallet.organizacion_id)
-        usuario = db.get(Usuario, wallet.usuario_id)
+        usuario = db.get(Usuario, wallet.usuario_id) if wallet.usuario_id is not None else None
         if organizacion is None or usuario is None:
             return
         crear_notificacion_y_email(
@@ -514,18 +571,18 @@ def _usuarios_para_movimiento(movimiento: MovimientoResponse, db: Session) -> li
     destino = db.get(Wallet, movimiento.wallet_destino_id)
     usuarios: list[Usuario] = []
     if movimiento.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback, TipoMovimiento.ajuste_admin}:
-        if destino is not None:
+        if destino is not None and destino.usuario_id is not None:
             usuario = db.get(Usuario, destino.usuario_id)
             if usuario is not None:
                 usuarios.append(usuario)
     elif movimiento.tipo == TipoMovimiento.retiro:
-        if origen is not None:
+        if origen is not None and origen.usuario_id is not None:
             usuario = db.get(Usuario, origen.usuario_id)
             if usuario is not None:
                 usuarios.append(usuario)
     else:
         for wallet in (origen, destino):
-            if wallet is None:
+            if wallet is None or wallet.usuario_id is None:
                 continue
             usuario = db.get(Usuario, wallet.usuario_id)
             if usuario is not None and all(existing.id != usuario.id for existing in usuarios):
@@ -561,6 +618,61 @@ def notificar_movimiento(
                 tipo=tipo,
                 titulo=titulo,
                 mensaje=mensaje,
+                template_name="movimiento.html",
+                metadata=metadata,
+                db=db,
+                background_tasks=background_tasks,
+                actor_usuario_id=actor_usuario_id,
+            )
+
+    _safe_event(_run)
+
+
+def notificar_pago_organizacion(
+    movimiento: MovimientoResponse,
+    db: Session,
+    background_tasks: BackgroundTasks | None,
+    *,
+    actor_usuario_id: UUID | None = None,
+) -> None:
+    def _run() -> None:
+        organizacion = db.get(Organizacion, movimiento.organizacion_id)
+        origen = db.get(Wallet, movimiento.wallet_origen_id)
+        destino = db.get(Wallet, movimiento.wallet_destino_id)
+        if organizacion is None or origen is None or destino is None:
+            return
+
+        metadata = {
+            "movimiento_id": movimiento.id,
+            "tipo": movimiento.tipo.value,
+            "monto": str(movimiento.monto),
+            "wallet_origen_id": movimiento.wallet_origen_id,
+            "wallet_destino_id": movimiento.wallet_destino_id,
+        }
+        if origen.usuario_id is not None:
+            pagador = db.get(Usuario, origen.usuario_id)
+            if pagador is not None:
+                crear_notificacion_y_email(
+                    organizacion=organizacion,
+                    usuario=pagador,
+                    tipo=TipoNotificacion.pago_organizacion_realizado,
+                    titulo="Pago realizado",
+                    mensaje=f"Se registro tu pago a la organizacion por {movimiento.monto}.",
+                    template_name="movimiento.html",
+                    metadata=metadata,
+                    db=db,
+                    background_tasks=background_tasks,
+                    actor_usuario_id=actor_usuario_id,
+                )
+
+        usuarios = _usuarios_owner_admin(db, movimiento.organizacion_id)
+        for usuario in usuarios:
+            crear_notificacion_y_email(
+                organizacion=organizacion,
+                usuario=usuario,
+                tipo=TipoNotificacion.pago_organizacion_recibido,
+                titulo="Pago recibido",
+                mensaje=f"La organizacion recibio un pago por {movimiento.monto}.",
                 template_name="movimiento.html",
                 metadata=metadata,
                 db=db,
