@@ -51,3 +51,19 @@ export function canViewMovements(user) {
 export function canViewOrganizationNotifications(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
 }
+
+export function canEditBranding(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
+export function canViewBranding(user) {
+  return canEditBranding(user) || isSupport(user);
+}
+
+export function canViewPlans(user) {
+  return canEditBranding(user) || isSupport(user);
+}
+
+export function canViewCurrentPlan(user) {
+  return canEditBranding(user);
+}

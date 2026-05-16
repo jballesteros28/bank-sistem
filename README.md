@@ -617,3 +617,60 @@ Limitaciones actuales:
 
 - Los filtros se aplican en frontend porque el backend todavia no expone query params de tipo, canal o lectura.
 - La vista de organizacion replica el alcance real del backend: administradores ven notificaciones internas de la organizacion; clientes y soporte no acceden a ese endpoint.
+
+### Branding UI
+
+La ruta privada `/branding` permite consultar y editar el branding de la organizacion cuando el rol tiene permisos. La pantalla usa React Hook Form + Zod, TanStack Query, preview visual y restricciones por plan para white-label avanzado.
+
+Endpoints consumidos:
+
+- `GET /api/v1/organizaciones/me/branding`: obtiene identidad, colores, dominios, moneda, timezone y estado white-label.
+- `PATCH /api/v1/organizaciones/me/branding`: actualiza el branding de la organizacion actual.
+- `GET /api/v1/planes/organizacion/actual`: consulta si el plan permite `permite_white_label`.
+
+Campos editables:
+
+- Identidad: `nombre_comercial`, `logo_url`.
+- Colores: `color_primario`, `color_secundario` en formato HEX.
+- Configuracion regional: `moneda_default` (`ARS`, `USD`, `USDT`, `PUNTOS`) y `timezone`.
+- White-label: `subdominio`, `dominio_personalizado`, `permite_white_label_activo`.
+
+Roles en UI:
+
+- `owner`, `admin` y `super_admin`: pueden editar branding.
+- `soporte`: puede ver branding, sin editar.
+- `cliente`: ve mensaje sin permisos.
+
+Reglas por plan:
+
+- Si `plan.permite_white_label=false`, la UI bloquea `dominio_personalizado` y `permite_white_label_activo`.
+- `subdominio` queda habilitado para roles editores porque el backend lo permite en cualquier plan.
+- Al guardar, se invalidan branding, dashboard y planes; tambien se actualizan `--color-primary` y `--color-secondary` para reflejar los colores sin esperar recarga.
+
+### Planes UI
+
+La ruta privada `/planes` muestra el plan actual cuando el backend lo permite y una grilla de planes disponibles con limites y features comerciales.
+
+Endpoints consumidos:
+
+- `GET /api/v1/planes`: lista los planes activos disponibles.
+- `GET /api/v1/planes/organizacion/actual`: obtiene el plan asignado a la organizacion actual.
+
+Datos visibles:
+
+- Plan actual, codigo, precio mensual y estado.
+- Limites de usuarios, wallets y movimientos mensuales.
+- Features: webhooks y white-label.
+- Grilla comparativa de `Free`, `Starter`, `Pro` y `Enterprise`.
+- CTA deshabilitado como `Proximamente`, porque no hay flujo frontend de cambio de plan en esta fase.
+
+Roles en UI:
+
+- `owner`, `admin` y `super_admin`: ven plan actual y catalogo de planes.
+- `soporte`: ve catalogo de planes; el plan actual queda indicado como restringido porque el backend actual limita ese endpoint a roles administrativos.
+- `cliente`: ve mensaje sin permisos para limites comerciales.
+
+Limitaciones actuales:
+
+- No se implementa cambio de plan desde frontend. El backend tiene endpoint administrativo de cambio, pero queda fuera de esta fase.
+- La moneda del precio comercial se muestra en USD segun los planes base actuales.
