@@ -471,3 +471,41 @@ Validacion local completada:
 - `npm run lint`: OK.
 - `npm run build`: OK.
 - `python -m pytest -q`: OK.
+
+### Dashboard Owner
+
+El dashboard privado de `/dashboard` muestra informacion real para usuarios `owner` y `admin` autenticados. Tambien degrada por seccion si un endpoint no aplica al rol actual, por ejemplo `soporte` o `super_admin` sin organizacion asociada.
+
+Endpoints consumidos:
+
+- `GET /api/v1/planes/organizacion/actual`
+- `GET /api/v1/wallets/organizacion`
+- `GET /api/v1/wallets/organizacion/principal`
+- `GET /api/v1/movimientos?skip=0&limit=5`
+- `GET /api/v1/notificaciones/no-leidas/count`
+- `GET /api/v1/organizaciones/me/branding`
+
+Datos visibles:
+
+- Saludo con nombre y rol del usuario.
+- Nombre comercial de la organizacion desde branding.
+- Plan actual, precio mensual, limites de usuarios, wallets y movimientos.
+- Flags de webhooks y white-label.
+- Total de wallets de organizacion.
+- Wallet principal de organizacion con alias, tipo, moneda, estado y saldo.
+- Ultimos movimientos visibles para la organizacion.
+- Cantidad de notificaciones no leidas.
+- Accesos rapidos a wallets, movimientos, branding e integraciones.
+
+Limitaciones actuales:
+
+- Los accesos rapidos navegan a las secciones existentes; todavia no abren modales ni crean recursos directamente desde el dashboard.
+- Los movimientos recientes muestran los ultimos 5 registros disponibles sin filtros avanzados.
+- Si el usuario tiene rol `cliente`, se muestra una pantalla de preparacion para un dashboard especifico futuro.
+- Si un endpoint falla por permisos o falta de organizacion, el dashboard conserva las demas secciones y muestra el error puntual.
+
+Validacion FASE 14.3:
+
+- UI E2E owner: onboarding, login, dashboard real, refresh, logout y token invalido OK.
+- Dashboard owner mostro `Free`, limite de 3 wallets, `Wallet empresa`, saldo ARS, movimientos recientes y notificaciones no leidas.
+- Endpoints del dashboard respondieron `200` durante la prueba UI.

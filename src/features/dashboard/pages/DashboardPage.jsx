@@ -1,49 +1,118 @@
-import { Bell, CreditCard, Layers3, ReceiptText } from "lucide-react";
+import { Bell, CreditCard, ReceiptText, WalletCards } from "lucide-react";
 
-import { useBranding } from "../../organizacion/api";
+import { DashboardHeader } from "../components/DashboardHeader";
+import { MetricCard } from "../components/MetricCard";
+import { NotificationsSummaryCard } from "../components/NotificationsSummaryCard";
+import { OrganizationWalletCard } from "../components/OrganizationWalletCard";
+import { PlanSummaryCard } from "../components/PlanSummaryCard";
+import { QuickActions } from "../components/QuickActions";
+import { RecentMovementsCard } from "../components/RecentMovementsCard";
+import { useDashboardData } from "../hooks/useDashboardData";
+import { ErrorState } from "../../../shared/components/feedback/ErrorState";
 import { Card } from "../../../shared/components/ui/Card";
 import { useAuth } from "../../../shared/hooks/useAuth";
-import { humanizeRole } from "../../../shared/utils/formatters";
+import { formatCurrency, formatLimit, formatNumber } from "../../../shared/utils/formatters";
 
-const dashboardCards = [
-  { label: "Wallets", value: "Preparado", icon: CreditCard, description: "Vista operativa para wallets del tenant." },
-  { label: "Movimientos", value: "Preparado", icon: ReceiptText, description: "Historial y operaciones internas." },
-  { label: "Plan actual", value: "Free", icon: Layers3, description: "Placeholder hasta conectar metricas reales." },
-  { label: "Notificaciones", value: "Preparado", icon: Bell, description: "Eventos internos de la organizacion." },
-];
+const CLIENT_ROLE = "cliente";
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const brandingQuery = useBranding();
-  const branding = brandingQuery.data;
-  const organizationName =
-    branding?.nombre_comercial ||
-    branding?.nombre ||
-    (user?.organizacion_id ? `Org ${String(user.organizacion_id).slice(0, 8)}` : "Organizacion actual");
+  const isClientDashboard = user?.rol === CLIENT_ROLE;
+  const dashboard = useDashboardData({ enabled: !isClientDashboard });
+
+  const branding = dashboard.brandingQuery.data;
+  const planActual = dashboard.planQuery.data;
+  const plan = planActual?.plan;
+  const walletPrincipal = dashboard.walletPrincipalQuery.data;
+  const organizationWallets = dashboard.organizationWalletsQuery.data || [];
+  const recentMovements = dashboard.recentMovementsQuery.data || [];
+  const unreadNotifications = dashboard.unreadNotificationsQuery.data || 0;
+  const walletLimitDescription = dashboard.planQuery.isLoading
+    ? "Limite del plan: cargando"
+    : `Limite del plan: ${plan ? formatLimit(plan.limite_wallets) : "no disponible"}`;
+  const movementsLimitDescription = dashboard.planQuery.isLoading
+    ? "Limite mensual: cargando"
+    : `Limite mensual: ${plan ? formatLimit(plan.limite_movimientos_mes) : "no disponible"}`;
+
+  if (isClientDashboard) {
+    return (
+      <div className="space-y-6">
+        <DashboardHeader user={user} branding={branding} />
+        <Card>
+          <h2 className="text-base font-semibold text-slate-950">Dashboard cliente en preparacion</h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Esta vista esta enfocada ahora en owners y admins. El resumen para clientes se conectara en una fase futura.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-normal text-slate-950">Hola, {user?.nombre || "usuario"}</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {humanizeRole(user?.rol)} · {organizationName}
-        </p>
-      </div>
+      <DashboardHeader user={user} branding={branding} />
+      {!dashboard.hasOrganization ? (
+        <ErrorState
+          title="Usuario sin organizacion"
+          message="Este dashboard necesita una organizacion asociada para cargar plan, wallets, movimientos y notificaciones."
+        />
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {dashboardCards.map((card) => (
-          <Card key={card.label}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-slate-500">{card.label}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{card.value}</p>
-                <p className="mt-2 text-xs leading-5 text-slate-500">{card.description}</p>
-              </div>
-              <div className="flex h-11 w-11 items-center justify-center rounded-md bg-slate-100 text-brand-primary">
-                <card.icon className="h-5 w-5" aria-hidden="true" />
-              </div>
-            </div>
-          </Card>
-        ))}
+        <MetricCard
+          title="Wallets organizacion"
+          value={formatNumber(organizationWallets.length)}
+          description={walletLimitDescription}
+          icon={CreditCard}
+          loading={dashboard.organizationWalletsQuery.isLoading}
+          error={dashboard.organizationWalletsQuery.isError}
+        />
+        <MetricCard
+          title="Saldo principal"
+          value={walletPrincipal ? formatCurrency(walletPrincipal.saldo, walletPrincipal.moneda) : "-"}
+          description={walletPrincipal?.alias || "Wallet empresa"}
+          icon={WalletCards}
+          loading={dashboard.walletPrincipalQuery.isLoading}
+          error={dashboard.walletPrincipalQuery.isError}
+        />
+        <MetricCard
+          title="Movimientos recientes"
+          value={formatNumber(recentMovements.length)}
+          description={movementsLimitDescription}
+          icon={ReceiptText}
+          loading={dashboard.recentMovementsQuery.isLoading}
+          error={dashboard.recentMovementsQuery.isError}
+        />
+        <MetricCard
+          title="No leidas"
+          value={formatNumber(unreadNotifications)}
+          description="Notificaciones pendientes"
+          icon={Bell}
+          loading={dashboard.unreadNotificationsQuery.isLoading}
+          error={dashboard.unreadNotificationsQuery.isError}
+        />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <PlanSummaryCard planActual={planActual} loading={dashboard.planQuery.isLoading} error={dashboard.planQuery.error} />
+        <OrganizationWalletCard
+          wallet={walletPrincipal}
+          loading={dashboard.walletPrincipalQuery.isLoading}
+          error={dashboard.walletPrincipalQuery.error}
+        />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-3">
+        <RecentMovementsCard
+          movements={recentMovements}
+          loading={dashboard.recentMovementsQuery.isLoading}
+          error={dashboard.recentMovementsQuery.error}
+        />
+        <div className="space-y-6">
+          <NotificationsSummaryCard
+            count={unreadNotifications}
+            loading={dashboard.unreadNotificationsQuery.isLoading}
+            error={dashboard.unreadNotificationsQuery.error}
+          />
+          <QuickActions />
+        </div>
       </div>
     </div>
   );
