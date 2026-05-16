@@ -674,3 +674,40 @@ Limitaciones actuales:
 
 - No se implementa cambio de plan desde frontend. El backend tiene endpoint administrativo de cambio, pero queda fuera de esta fase.
 - La moneda del precio comercial se muestra en USD segun los planes base actuales.
+
+### Integraciones UI
+
+La ruta privada `/integraciones` deja de ser placeholder y permite gestionar API Keys, Webhooks y deliveries desde tabs independientes. La pantalla usa TanStack Query por panel, React Hook Form + Zod para formularios y respeta el plan actual consultando `GET /api/v1/planes/organizacion/actual`.
+
+Endpoints consumidos:
+
+- `GET /api/v1/integraciones/api-keys`
+- `POST /api/v1/integraciones/api-keys`
+- `DELETE /api/v1/integraciones/api-keys/{api_key_id}`
+- `GET /api/v1/integraciones/webhooks`
+- `POST /api/v1/integraciones/webhooks`
+- `PATCH /api/v1/integraciones/webhooks/{webhook_id}`
+- `DELETE /api/v1/integraciones/webhooks/{webhook_id}`
+- `GET /api/v1/integraciones/webhooks/deliveries?skip=0&limit=100`
+- `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar`
+- `GET /api/v1/planes/organizacion/actual`
+
+API Keys:
+
+- La tabla muestra `nombre`, `key_prefix`, scopes, estado, ultimo uso y fecha de creacion.
+- La key real solo aparece en el modal posterior a la creacion y no se guarda en `localStorage` ni estado global.
+- El boton de copiado usa `navigator.clipboard` y muestra feedback local.
+- `owner`, `admin` y `super_admin` pueden crear y revocar; `soporte` solo ve la UI si el backend permite listar; `cliente` ve mensaje sin permisos.
+
+Webhooks:
+
+- El formulario pide `nombre`, `url`, `eventos`, `secret` y estado activo.
+- El backend actual exige `secret` al crear y no lo devuelve; la UI no lo muestra luego ni lo incluye en tablas.
+- Si el plan actual tiene `permite_webhooks=false`, la pantalla muestra "Tu plan actual no incluye webhooks." y deshabilita acciones de creacion/edicion.
+- La tabla permite activar/pausar con `PATCH` y eliminar/desactivar con `DELETE` cuando el rol y el plan lo permiten.
+
+Deliveries:
+
+- La tabla muestra evento, status, `status_code`, intentos, fechas, error y accion de reenvio.
+- Solo se habilita reenviar deliveries `fallido` o `pendiente`, usando `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar`.
+- Un fallo cargando deliveries no rompe las tabs de API Keys o Webhooks.

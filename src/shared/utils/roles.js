@@ -67,3 +67,15 @@ export function canViewPlans(user) {
 export function canViewCurrentPlan(user) {
   return canEditBranding(user);
 }
+
+export function canManageApiKeys(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
+export function canManageWebhooks(user, planAllowsWebhooks = true) {
+  return Boolean(planAllowsWebhooks) && (isOwner(user) || isAdmin(user) || isSuperAdmin(user));
+}
+
+export function canViewWebhookDeliveries(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
+}
