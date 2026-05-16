@@ -12,6 +12,7 @@ Backend modular para una plataforma Wallet SaaS multi-tenant. El dominio publico
 - Pydantic v2
 - Alembic
 - pytest
+- React + Vite para el frontend
 
 ## Estructura
 
@@ -77,6 +78,16 @@ python -m alembic upgrade head
 alembic upgrade head
 uvicorn app.main:app --reload
 pytest -q
+```
+
+Frontend:
+
+```bash
+npm install
+npm run dev
+npm run lint
+npm run build
+npm run preview
 ```
 
 ## Endpoints principales
@@ -304,3 +315,49 @@ Endpoints principales:
 - `PATCH /api/v1/notificaciones/{notificacion_id}/leida`: marca una notificacion como leida.
 - `PATCH /api/v1/notificaciones/marcar-todas-leidas`: marca todas las notificaciones visibles como leidas.
 - `GET /api/v1/notificaciones/organizacion`: vista administrativa por organizacion.
+
+## Frontend React
+
+El frontend esta creado con React + Vite en JavaScript, sin TypeScript. La decision permite avanzar rapido sobre una base modular manteniendo claridad con JSDoc en `src/shared/docs/apiShapes.js`, validaciones Zod y separacion por features.
+
+Stack frontend:
+
+- React
+- Vite
+- JavaScript (`.js` y `.jsx`)
+- React Router
+- Axios
+- TanStack Query
+- Zustand
+- React Hook Form
+- Zod
+- Tailwind CSS
+
+Variables requeridas en `.env` o `.env.local`:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_PREFIX=/api/v1
+VITE_APP_NAME=Wallet SaaS
+```
+
+No versionar `.env` real. `.env.example` ya incluye las variables del backend y frontend.
+
+Estructura frontend:
+
+```text
+src/
+  app/              # router, providers y QueryClient
+  shared/           # API client, UI, layouts, hooks, utils y shapes JSDoc
+  features/         # auth, onboarding, dashboard, wallets, movimientos, etc.
+  styles/           # Tailwind global y variables de tema
+```
+
+Rutas:
+
+- Publicas: `/login`, `/onboarding`
+- Privadas: `/dashboard`, `/wallets`, `/movimientos`, `/notificaciones`, `/branding`, `/planes`, `/integraciones`
+
+El cliente HTTP usa `VITE_API_BASE_URL + VITE_API_PREFIX`, agrega `Authorization: Bearer <token>`, desempaqueta respuestas `{ success, message, data }` y limpia la sesion ante `401`. El token queda en `localStorage` por ahora; queda marcado el TODO para migrar a cookies HttpOnly en produccion.
+
+El branding dinamico se prepara desde `GET /api/v1/organizaciones/me/branding` y aplica `nombre_comercial`, `logo_url`, `color_primario` y `color_secundario` al layout cuando hay sesion.
