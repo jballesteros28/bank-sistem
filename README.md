@@ -509,3 +509,36 @@ Validacion FASE 14.3:
 - UI E2E owner: onboarding, login, dashboard real, refresh, logout y token invalido OK.
 - Dashboard owner mostro `Free`, limite de 3 wallets, `Wallet empresa`, saldo ARS, movimientos recientes y notificaciones no leidas.
 - Endpoints del dashboard respondieron `200` durante la prueba UI.
+
+### Wallets UI
+
+La ruta privada `/wallets` deja de ser placeholder y muestra una pantalla funcional para consultar wallets de organizacion y wallets de usuario. La vista usa TanStack Query por seccion para que un error puntual no bloquee toda la pagina, y React Hook Form + Zod para crear wallets de organizacion.
+
+Endpoints consumidos:
+
+- `GET /api/v1/wallets`: lista wallets de usuario visibles segun permisos.
+- `GET /api/v1/wallets/organizacion`: lista wallets de organizacion.
+- `GET /api/v1/wallets/organizacion/principal`: obtiene la wallet principal activa de la organizacion.
+- `POST /api/v1/wallets/organizacion`: crea una wallet de organizacion.
+
+Payload de creacion de wallet de organizacion:
+
+```json
+{
+  "alias": "Caja sucursal centro",
+  "tipo": "caja",
+  "moneda": "ARS",
+  "limite_operacion": 50000,
+  "es_principal": false
+}
+```
+
+Monedas disponibles segun el enum backend actual: `ARS`, `USD` y `PUNTOS`.
+
+Roles en UI:
+
+- `owner`, `admin` y `super_admin`: pueden ver y crear wallets de organizacion cuando tienen una organizacion en alcance.
+- `soporte`: puede ver wallets de organizacion, pero no ve el boton de creacion.
+- `cliente`: no puede listar ni crear wallets de organizacion; la seccion aparece bloqueada y conserva la lista de wallets de usuario.
+
+La pantalla muestra loading, error y empty states por seccion; cards con alias, tipo, `owner_type`, moneda, saldo, estado, limite por operacion, marca principal y fecha de creacion; y al crear invalida queries de `wallets` y `dashboard`.
