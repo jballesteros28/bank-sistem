@@ -581,3 +581,39 @@ Limitaciones actuales:
 - Los filtros de tipo, estado y busqueda por descripcion/referencia se aplican en frontend porque el backend todavia no expone esos query params.
 - El listado carga hasta 100 movimientos recientes.
 - La tabla muestra alias de wallets cuando la sesion tiene permiso para listarlas; si no, muestra el prefijo del ID.
+
+### Notificaciones UI
+
+La ruta privada `/notificaciones` muestra una bandeja real para consultar eventos internos, revisar el detalle y marcar notificaciones como leidas. El Topbar consume el contador de no leidas y muestra un badge cuando hay pendientes.
+
+Endpoints consumidos:
+
+- `GET /api/v1/notificaciones?skip=0&limit=100`: lista la bandeja visible para el usuario autenticado.
+- `GET /api/v1/notificaciones/no-leidas/count`: obtiene el contador para la pagina, dashboard y Topbar.
+- `PATCH /api/v1/notificaciones/{notificacion_id}/leida`: marca una notificacion como leida.
+- `PATCH /api/v1/notificaciones/marcar-todas-leidas`: marca todas las notificaciones visibles como leidas.
+- `GET /api/v1/notificaciones/organizacion?skip=0&limit=200`: bandeja organizacional para roles administrativos.
+
+Datos visibles:
+
+- Titulo, mensaje, tipo, canal, fecha de creacion y estado leida/no leida.
+- Estado de envio para canal `email`: enviada, pendiente o error.
+- Detalle con `id`, fechas de creacion, lectura y envio, error de envio y metadata formateada.
+- Filtros client-side por leida/no leida, tipo, canal y busqueda en titulo, mensaje o metadata.
+
+Roles en UI:
+
+- `cliente`: consulta y marca sus propias notificaciones.
+- `owner`, `admin` y `super_admin`: consultan la bandeja visible y la vista de organizacion.
+- `soporte`: consulta su bandeja visible; el endpoint de organizacion existe pero el backend actual lo restringe a administradores, por eso la pestaña de organizacion no se muestra.
+
+Acciones disponibles:
+
+- Marcar una notificacion individual como leida.
+- Marcar todas las notificaciones visibles como leidas.
+- Ver detalle sin modificar el estado.
+
+Limitaciones actuales:
+
+- Los filtros se aplican en frontend porque el backend todavia no expone query params de tipo, canal o lectura.
+- La vista de organizacion replica el alcance real del backend: administradores ven notificaciones internas de la organizacion; clientes y soporte no acceden a ese endpoint.

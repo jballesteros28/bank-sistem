@@ -28,7 +28,10 @@ export const endpoints = {
   },
   notificaciones: {
     list: "/notificaciones",
+    organization: "/notificaciones/organizacion",
     unreadCount: "/notificaciones/no-leidas/count",
+    markRead: (notificacionId) => `/notificaciones/${notificacionId}/leida`,
+    markAllRead: "/notificaciones/marcar-todas-leidas",
   },
   organizacion: {
     me: "/organizaciones/me",

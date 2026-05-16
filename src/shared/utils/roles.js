@@ -47,3 +47,7 @@ export function canReverseMovement(user) {
 export function canViewMovements(user) {
   return Boolean(getRole(user));
 }
+
+export function canViewOrganizationNotifications(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
