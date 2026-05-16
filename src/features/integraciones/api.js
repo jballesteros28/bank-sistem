@@ -48,7 +48,3 @@ export function getWebhookDeliveries(params) {
 export function retryWebhookDelivery(deliveryId) {
   return httpClient.post(endpoints.integraciones.reenviarDelivery(deliveryId));
 }
-
-export const listApiKeys = getApiKeys;
-export const listWebhooks = getWebhooks;
-export const listWebhookDeliveries = getWebhookDeliveries;

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { CurrentPlanCard } from "../components/CurrentPlanCard";
 import { PlanComparisonGrid } from "../components/PlanComparisonGrid";
-import { getPlanActual, getPlanes, planQueryKeys } from "../api";
+import { getPlanActual, listPlanes, planQueryKeys } from "../api";
 import { ErrorState } from "../../../shared/components/feedback/ErrorState";
 import { Card, CardHeader } from "../../../shared/components/ui/Card";
 import { EmptyState } from "../../../shared/components/ui/EmptyState";
@@ -31,7 +31,7 @@ export function PlanesPage() {
   });
   const plansQuery = useQuery({
     queryKey: planQueryKeys.list,
-    queryFn: getPlanes,
+    queryFn: listPlanes,
     enabled: Boolean(token) && canView,
     retry: false,
   });

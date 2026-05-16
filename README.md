@@ -459,10 +459,10 @@ Password: Password123!
 
 Troubleshooting:
 
-- Si el navegador muestra `Network Error` pero `curl`/PowerShell contra la API funciona, revisar CORS. El backend permite `localhost` y `127.0.0.1` para Vite en `5173` y `5174`.
+- Si el navegador muestra `Network Error` pero `curl`/PowerShell contra la API funciona, revisar `CORS_ORIGINS` en `.env`.
 - Si una ruta privada vuelve a `/login`, revisar que exista `wallet_saas_token` y que `GET /api/v1/auth/me` devuelva `200`.
 - Si el token esta vencido o malformado, el comportamiento esperado es `401`, limpieza de storage y redireccion a `/login`.
-- Si Vite cambia de puerto, agregar ese origin a `allow_origins` o iniciar Vite explicitamente con `--port 5173`/`5174`.
+- Si Vite cambia de puerto, agregar ese origin a `CORS_ORIGINS` o iniciar Vite explicitamente con `--port 5173`.
 
 Validacion local completada:
 
@@ -711,3 +711,93 @@ Deliveries:
 - La tabla muestra evento, status, `status_code`, intentos, fechas, error y accion de reenvio.
 - Solo se habilita reenviar deliveries `fallido` o `pendiente`, usando `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar`.
 - Un fallo cargando deliveries no rompe las tabs de API Keys o Webhooks.
+
+### Validacion E2E Integraciones
+
+Validacion ejecutada el 2026-05-16 con backend activo en `http://127.0.0.1:8000` y frontend Vite en `http://127.0.0.1:5173`.
+
+Servicios y CORS:
+
+- `GET /health`, `/docs` y `/openapi.json` respondieron OK.
+- El origen `http://127.0.0.1:5173` paso preflight y requests reales contra `/api/v1`.
+- No se agrego CORS temporal. Para FASE 14.8.2 conviene mover origins a `.env`, porque hoy estan hardcodeados en backend.
+
+Flujo probado:
+
+- Alta desde `/onboarding` de `Demo Integraciones E2E` con slug `demo-integraciones-e2e-[timestamp]` y owner `owner-integraciones-[timestamp]@example.com`.
+- Sesion owner cargada en navegador real para `/integraciones`.
+- Usuarios `soporte` y `cliente` creados para validar restricciones.
+
+API Keys:
+
+- Owner creo `Key E2E` con scopes `wallets:read`, `movimientos:read` y `movimientos:write`.
+- El backend devolvio la key real solo en creacion; luego el listado mostro `key_prefix`.
+- Despues de recargar `/integraciones`, la key real no reaparecio en DOM, `localStorage` ni consola; tampoco se expuso `key_hash`.
+- Revocacion validada con `DELETE /api/v1/integraciones/api-keys/{id}` y estado final `Revocada`.
+- El copiado con `navigator.clipboard` quedo bloqueado en Chrome headless; se mantiene como dependiente del permiso del navegador.
+
+Webhooks Free/Pro:
+
+- En plan Free, la UI mostro `Tu plan actual no incluye webhooks` y el boton de creacion quedo deshabilitado.
+- Submit forzado contra backend respondio `403` con `El plan free no permite webhooks.`
+- Para validar Pro se cambio el plan de la organizacion por SQL directo de E2E, ya que no existe flujo UI de cambio de plan.
+- En Pro, la UI habilito `Crear webhook`; se creo `Webhook E2E` contra `https://example.com/webhook-test` con eventos `movimiento.creado` y `pago_organizacion.creado`.
+- El listado de webhooks mostro nombre, URL, eventos y activo; no expuso `secret` ni `secret_encrypted`.
+
+Deliveries:
+
+- Se genero un movimiento de deposito para disparar `movimiento.creado`.
+- El delivery se creo y quedo `fallido` por resolucion DNS de `example.com` en el entorno local, con `intentos=1`.
+- Reenvio manual validado: el endpoint respondio OK, paso por `pendiente` y luego fallo nuevamente por la misma causa externa, con `intentos=2`.
+
+Roles:
+
+- `owner`: puede crear/revocar API Keys, crear webhooks en Pro y reenviar deliveries permitidos.
+- `soporte`: backend respondio `403` para API Keys, creacion de webhooks y reenvio/listado de deliveries; la UI no muestra acciones de creacion para este rol y debe presentar el error claro del backend cuando intenta consultar endpoints restringidos.
+- `cliente`: backend respondio `403` en endpoints de integraciones; la UI bloquea el acceso util con mensaje sin permisos.
+
+Seguridad de secretos:
+
+- No se encontro API Key real ni webhook secret en `localStorage`.
+- No se imprimieron secretos en consola; solo aparecieron mensajes de Vite/React DevTools.
+- Las tablas no muestran secretos completos: API Keys usan `key_prefix` y Webhooks no renderizan secrets.
+
+Observaciones pendientes:
+
+- No hay UI para cambiar plan; el paso Free -> Pro se hizo por base de datos para esta validacion.
+- Chrome headless no confirmo el cierre del modal de API Key por click aunque la recarga verifico que la key real no persiste ni vuelve a mostrarse.
+
+### Limpieza tecnica FASE 14.8.2
+
+Configuracion y limpieza:
+
+- CORS quedo configurable con `CORS_ORIGINS` en `.env`, parseado como CSV desde `settings.CORS_ORIGINS`.
+- `.env.example` documenta `CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5177`.
+- `.gitignore` cubre caches Python, `.pytest_cache/`, `.env`, `.env.local`, `node_modules/`, `dist/`, `.vite/`, logs y `.codex_tmp/`.
+- Se elimino `app/apps/auth/models.py` porque solo reexportaba `Usuario` y no tenia imports consumidores.
+- Se elimino `src/shared/hooks/useDebounce.js` porque no tenia consumidores.
+- Se quitaron aliases API no usados en integraciones y planes.
+
+Frontend:
+
+- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes e integraciones.
+- El build quedo dividido por pagina; el chunk inicial bajo a ~496 kB y desaparecio el warning de Vite por chunk mayor a 500 kB.
+- Las dependencias frontend actuales estan en uso: React, React DOM, React Router, Axios, TanStack Query, Zustand, React Hook Form, Zod, resolvers, Tailwind, ESLint y Vite.
+- Se reviso seguridad local: el store de auth persiste solo token/user; API Keys y webhook secrets viven solo en formularios/modales y no se guardan en storage global.
+- Las tablas usan contenedores `overflow-x-auto` y los modales tienen ancho maximo responsivo, por lo que mobile mantiene scroll horizontal contenido sin romper el layout de pagina.
+
+Backend:
+
+- La estructura modular mantiene separacion `models/services/routes/schemas` por app.
+- No quedan imports a `app.apps.auth.models`; el modelo fuente de usuario es `app.apps.usuarios.models.Usuario`.
+- Dependencias backend auditadas: se mantienen paquetes usados por FastAPI, SQLAlchemy, Alembic, Pydantic, JWT, hashing, Postgres, tests, webhooks HTTP y cifrado.
+- `python-multipart` y `fastapi-mail` no se agregan porque esta base no usa uploads/form-data ni FastAPI-Mail; email se implementa con `smtplib`.
+- La compatibilidad de decrypt legacy de webhooks se conserva para no invalidar secrets existentes.
+
+Recomendaciones para produccion:
+
+- Mover auth a cookies HttpOnly/SameSite y rotacion de refresh tokens.
+- Definir `CORS_ORIGINS` por ambiente, sin comodines.
+- Configurar `SECRET_KEY` fuerte y rotacion controlada para claves/firmas.
+- Servir frontend build desde CDN o servidor estatico con cache headers.
+- Mantener `node_modules/`, `dist/`, caches y archivos temporales fuera del artefacto versionado.

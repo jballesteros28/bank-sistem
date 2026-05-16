@@ -14,7 +14,3 @@ export function getPlanActual() {
 export function listPlanes() {
   return httpClient.get(endpoints.planes.list);
 }
-
-export function getPlanes() {
-  return listPlanes();
-}
