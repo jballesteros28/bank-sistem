@@ -110,6 +110,7 @@ pytest -q
 - `PATCH /api/v1/organizaciones/me/branding`
 - `POST /api/v1/integraciones/api-keys`
 - `GET /api/v1/integraciones/webhooks`
+- `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar`
 - `GET /api/v1/ext/wallets/{wallet_id}`
 - `POST /api/v1/ext/movimientos/deposito`
 - `POST /api/v1/ext/movimientos/cashback`
@@ -184,6 +185,12 @@ Endpoint especifico:
 
 Las organizaciones pueden conectar sistemas externos mediante API Keys y Webhooks. Las API Keys pertenecen siempre a una organizacion, no reemplazan el login JWT y no se guardan en texto plano. La key real se muestra solo al crearla; luego el backend conserva `key_prefix` para identificacion y `key_hash` para validacion.
 
+La auditoria distingue el actor que origina cada evento:
+
+- `usuario`: acciones autenticadas con JWT. Se guarda `actor_usuario_id`.
+- `api_key`: acciones en `/api/v1/ext` autenticadas con API Key. Se guarda `actor_api_key_id` y no se simula un usuario.
+- `sistema`: acciones internas o de background, como envios de webhooks o emails.
+
 Scopes iniciales:
 
 - `wallets:read`
@@ -214,9 +221,12 @@ Webhooks:
 
 - Los endpoints se administran en `POST/GET/PATCH/DELETE /api/v1/integraciones/webhooks`.
 - Cada webhook define `url`, `eventos` y un `secret` usado para firmar.
+- El `secret` se guarda cifrado con Fernet derivado desde `SECRET_KEY`; nunca se devuelve en listados ni responses de administracion.
 - Cada delivery incluye firma HMAC SHA256 en `X-Wallet-Signature`.
 - Tambien se envian `X-Wallet-Event` y `X-Wallet-Delivery-Id`.
 - Los errores de envio no bloquean la operacion principal; quedan registrados como deliveries `fallido`.
+- El envio en background abre una sesion DB propia y no reutiliza la sesion del request original.
+- `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar` permite a `owner`, `admin` y `super_admin` reintentar deliveries `fallido` o `pendiente`. `soporte` no puede reenviar, y un tenant no puede reenviar deliveries de otra organizacion.
 
 Eventos soportados:
 

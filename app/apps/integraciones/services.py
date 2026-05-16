@@ -8,12 +8,13 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException, status
+from cryptography.fernet import Fernet, InvalidToken
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.apps.auditoria.schemas import AuditLogCreate
-from app.apps.auditoria.services import registrar_audit_log
+from app.apps.auditoria.schemas import AuditActorTipo
+from app.apps.auditoria.services import registrar_evento
 from app.apps.auth.schemas import DatosUsuarioToken
 from app.apps.integraciones.models import APIKey, WebhookDelivery, WebhookEndpoint
 from app.apps.integraciones.schemas import (
@@ -67,22 +68,42 @@ def _hash_value(value: str) -> str:
     return hmac.new(settings.SECRET_KEY.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def _encryption_key() -> bytes:
+def _legacy_encryption_key() -> bytes:
     return hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
 
 
-def encrypt_secret(secret: str) -> str:
+def _fernet() -> Fernet:
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest())
+    return Fernet(key)
+
+
+def _legacy_encrypt_secret(secret: str) -> str:
     data = secret.encode("utf-8")
-    key = _encryption_key()
+    key = _legacy_encryption_key()
     encrypted = bytes(byte ^ key[index % len(key)] for index, byte in enumerate(data))
     return base64.urlsafe_b64encode(encrypted).decode("ascii")
 
 
-def decrypt_secret(encrypted: str) -> str:
+def _legacy_decrypt_secret(encrypted: str) -> str:
     data = base64.urlsafe_b64decode(encrypted.encode("ascii"))
-    key = _encryption_key()
+    key = _legacy_encryption_key()
     decrypted = bytes(byte ^ key[index % len(key)] for index, byte in enumerate(data))
     return decrypted.decode("utf-8")
+
+
+def encrypt_webhook_secret(secret: str) -> str:
+    return _fernet().encrypt(secret.encode("utf-8")).decode("ascii")
+
+
+def decrypt_webhook_secret(encrypted: str) -> str:
+    try:
+        return _fernet().decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return _legacy_decrypt_secret(encrypted)
+
+
+encrypt_secret = encrypt_webhook_secret
+decrypt_secret = decrypt_webhook_secret
 
 
 def _audit(
@@ -91,21 +112,23 @@ def _audit(
     evento: str,
     mensaje: str,
     organizacion_id: UUID | None,
+    actor_tipo: AuditActorTipo | None = None,
     actor_usuario_id: UUID | None = None,
+    actor_api_key_id: UUID | None = None,
     metadata: dict[str, Any] | None = None,
     nivel: str = "INFO",
 ) -> None:
     try:
-        registrar_audit_log(
-            AuditLogCreate(
-                evento=evento,
-                mensaje=mensaje,
-                nivel=nivel,
-                actor_usuario_id=actor_usuario_id,
-                organizacion_id=organizacion_id,
-                metadata=metadata,
-            ),
+        registrar_evento(
             db,
+            organizacion_id=organizacion_id,
+            evento=evento,
+            mensaje=mensaje,
+            nivel=nivel,
+            actor_tipo=actor_tipo,
+            actor_usuario_id=actor_usuario_id,
+            actor_api_key_id=actor_api_key_id,
+            metadata=metadata,
         )
     except Exception:
         db.rollback()
@@ -237,6 +260,8 @@ def registrar_uso_api_key(
         evento="api_key_usada",
         mensaje="API Key usada en endpoint externo.",
         organizacion_id=api_key.organizacion_id,
+        actor_tipo="api_key",
+        actor_api_key_id=api_key.id,
         metadata={
             "api_key_id": str(api_key.id),
             "key_prefix": api_key.key_prefix,
@@ -268,7 +293,7 @@ def crear_webhook_endpoint(
         nombre=datos.nombre,
         url=str(datos.url),
         eventos=datos.eventos,
-        secret_encrypted=encrypt_secret(datos.secret),
+        secret_encrypted=encrypt_webhook_secret(datos.secret),
         activo=True,
     )
     db.add(webhook)
@@ -327,7 +352,7 @@ def actualizar_webhook_endpoint(
     if "url" in cambios and cambios["url"] is not None:
         webhook.url = str(cambios["url"])
     if "secret" in cambios and cambios["secret"] is not None:
-        webhook.secret_encrypted = encrypt_secret(cambios["secret"])
+        webhook.secret_encrypted = encrypt_webhook_secret(cambios["secret"])
     for field in ("nombre", "eventos", "activo"):
         if field in cambios:
             setattr(webhook, field, cambios[field])
@@ -388,3 +413,54 @@ def listar_webhook_deliveries(
         query = query.where(WebhookDelivery.webhook_endpoint_id == webhook_endpoint_id)
     deliveries = db.scalars(query.offset(skip).limit(limit)).all()
     return [WebhookDeliveryResponse.model_validate(delivery) for delivery in deliveries]
+
+
+def _get_delivery_scoped(
+    delivery_id: UUID,
+    current_user: DatosUsuarioToken,
+    db: Session,
+) -> WebhookDelivery:
+    delivery = db.get(WebhookDelivery, delivery_id)
+    if delivery is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery no encontrado.")
+    if not is_super_admin(current_user.rol) and delivery.organizacion_id != current_user.organizacion_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery no encontrado.")
+    return delivery
+
+
+def reenviar_webhook_delivery(
+    delivery_id: UUID,
+    current_user: DatosUsuarioToken,
+    db: Session,
+    background_tasks: BackgroundTasks,
+) -> WebhookDeliveryResponse:
+    _ensure_integration_admin(current_user, write=True)
+    delivery = _get_delivery_scoped(delivery_id, current_user, db)
+    if delivery.status not in {"fallido", "pendiente"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden reenviar deliveries fallidos o pendientes.",
+        )
+    delivery.status = "pendiente"
+    delivery.error = None
+    db.add(delivery)
+    db.commit()
+    db.refresh(delivery)
+    _audit(
+        db,
+        evento="webhook_reenvio_agendado",
+        mensaje="Reenvio manual de webhook agendado.",
+        actor_usuario_id=current_user.id,
+        organizacion_id=delivery.organizacion_id,
+        metadata={
+            "delivery_id": str(delivery.id),
+            "webhook_endpoint_id": str(delivery.webhook_endpoint_id),
+            "evento": delivery.evento,
+            "intentos": delivery.intentos,
+        },
+    )
+
+    from app.apps.integraciones.webhook_dispatcher import enviar_webhook_delivery
+
+    background_tasks.add_task(enviar_webhook_delivery, delivery.id)
+    return WebhookDeliveryResponse.model_validate(delivery)

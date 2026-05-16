@@ -28,16 +28,16 @@ from app.apps.integraciones.services import (
     listar_webhook_deliveries,
     listar_webhook_endpoints,
     registrar_uso_api_key,
+    reenviar_webhook_delivery,
     revocar_api_key,
 )
 from app.apps.integraciones.webhook_dispatcher import encolar_webhook_evento
 from app.apps.movimientos.models import Movimiento
 from app.apps.movimientos.schemas import MovimientoCashbackCreate, MovimientoDepositoCreate, MovimientoResponse
-from app.apps.movimientos.services import crear_cashback, crear_deposito
+from app.apps.movimientos.services import crear_cashback_api_key, crear_deposito_api_key
 from app.apps.wallets.models import Wallet
 from app.apps.wallets.schemas import WalletResponse
 from app.core.database import get_db
-from app.shared.enums import RolUsuario
 from app.shared.responses import ApiResponse, ok
 
 
@@ -129,14 +129,15 @@ def get_webhook_deliveries(
     return ok(deliveries, "Deliveries obtenidos correctamente.")
 
 
-def _integration_user(context: APIKeyContext) -> DatosUsuarioToken:
-    return DatosUsuarioToken(
-        id=context.api_key.id,
-        email=f"api-key-{context.api_key.id.hex[:12]}@integraciones.example.com",
-        nombre=context.api_key.nombre,
-        rol=RolUsuario.owner,
-        organizacion_id=context.organizacion.id,
-    )
+@router.post("/webhooks/deliveries/{delivery_id}/reenviar", response_model=ApiResponse[WebhookDeliveryResponse])
+def post_reenviar_webhook_delivery(
+    delivery_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: DatosUsuarioToken = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[WebhookDeliveryResponse]:
+    delivery = reenviar_webhook_delivery(delivery_id, current_user, db, background_tasks)
+    return ok(delivery, "Reenvio de webhook agendado correctamente.")
 
 
 def _movement_payload(movimiento: MovimientoResponse) -> dict[str, object]:
@@ -163,7 +164,12 @@ def ext_post_cashback(
     context: APIKeyContext = Depends(require_api_key_scope("movimientos:write")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    movimiento = crear_cashback(datos, _integration_user(context), db)
+    movimiento = crear_cashback_api_key(
+        datos,
+        organizacion_id=context.organizacion.id,
+        actor_api_key_id=context.api_key.id,
+        db=db,
+    )
     registrar_uso_api_key(
         context.api_key,
         db,
@@ -187,7 +193,12 @@ def ext_post_deposito(
     context: APIKeyContext = Depends(require_api_key_scope("movimientos:write")),
     db: Session = Depends(get_db),
 ) -> ApiResponse[MovimientoResponse]:
-    movimiento = crear_deposito(datos, _integration_user(context), db)
+    movimiento = crear_deposito_api_key(
+        datos,
+        organizacion_id=context.organizacion.id,
+        actor_api_key_id=context.api_key.id,
+        db=db,
+    )
     registrar_uso_api_key(
         context.api_key,
         db,

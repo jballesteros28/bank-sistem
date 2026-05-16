@@ -24,6 +24,7 @@ env/
 *.out
 *.err
 *.pid
+*.db
 tmp/
 temp/
 .codex_tmp/
@@ -35,4 +36,3 @@ wallet_saas_test.db
 .DS_Store
 Thumbs.db
 desktop.ini
-

@@ -434,6 +434,9 @@ def test_auditoria_de_movimiento_registra_wallets_existentes_monto_y_moneda(
     assert response.status_code == 201, response.text
     audit_log = db_session.scalar(select(AuditLog).where(AuditLog.evento == "movimiento_registrado"))
     assert audit_log is not None
+    assert audit_log.actor_tipo == "usuario"
+    assert audit_log.actor_usuario_id == admin.id
+    assert audit_log.actor_api_key_id is None
     assert audit_log.metadata_log["tipo_operacion"] == "deposito"
     assert audit_log.metadata_log["monto"] == "11.00"
     assert audit_log.metadata_log["moneda"] == "ARS"

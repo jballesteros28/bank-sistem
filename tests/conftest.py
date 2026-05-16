@@ -18,6 +18,9 @@ os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["ALGORITHM"] = "HS256"
 os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "60"
 
+import app.core.database as database_module
+from app.apps.integraciones import webhook_dispatcher
+from app.apps.notificaciones import email_service
 from app.apps.organizaciones.models import Organizacion
 from app.apps.usuarios.models import Usuario
 from app.apps.wallets.models import Wallet
@@ -37,6 +40,10 @@ engine_test = create_engine(
     future=True,
 )
 TestingSessionLocal = sessionmaker(bind=engine_test, autoflush=False, autocommit=False, future=True)
+
+database_module.SessionLocal = TestingSessionLocal
+webhook_dispatcher.SessionLocal = TestingSessionLocal
+email_service.SessionLocal = TestingSessionLocal
 
 
 @pytest.fixture(autouse=True)

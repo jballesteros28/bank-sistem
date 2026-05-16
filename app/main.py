@@ -22,7 +22,7 @@ from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="1.6.0-alpha",
+    version="1.6.1-alpha",
     description=(
         "API multi-tenant para Wallet SaaS. Incluye configuracion de branding "
         "y preparacion white-label por organizacion."

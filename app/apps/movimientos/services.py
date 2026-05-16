@@ -6,8 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.apps.auditoria.schemas import AuditLogCreate
-from app.apps.auditoria.services import registrar_audit_log
+from app.apps.auditoria.services import registrar_evento_api_key, registrar_evento_usuario
 from app.apps.auth.schemas import DatosUsuarioToken
 from app.apps.movimientos.models import Movimiento
 from app.apps.movimientos.permissions import ensure_can_debit_wallet
@@ -73,6 +72,15 @@ def _ensure_same_organization(wallets: list[Wallet], current_user: DatosUsuarioT
     if not is_super_admin(current_user.rol) and organization_id != current_user.organizacion_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No se puede operar entre organizaciones.")
     return organization_id
+
+
+def _ensure_same_api_key_organization(wallets: list[Wallet], organizacion_id: UUID) -> UUID:
+    if not wallets:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento debe referenciar una wallet.")
+    organization_ids = {wallet.organizacion_id for wallet in wallets}
+    if len(organization_ids) != 1 or organizacion_id not in organization_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No se puede operar entre organizaciones.")
+    return organizacion_id
 
 
 def _ensure_active(wallet: Wallet, label: str) -> None:
@@ -255,15 +263,34 @@ def _audit_movimiento(
     mensaje: str | None = None,
 ) -> None:
     try:
-        registrar_audit_log(
-            AuditLogCreate(
-                evento=evento,
-                mensaje=mensaje or f"Movimiento {movimiento.tipo.value} registrado.",
-                actor_usuario_id=current_user.id,
-                organizacion_id=movimiento.organizacion_id,
-                metadata=_movement_audit_metadata(movimiento),
-            ),
+        registrar_evento_usuario(
             db,
+            organizacion_id=movimiento.organizacion_id,
+            actor_usuario_id=current_user.id,
+            evento=evento,
+            mensaje=mensaje or f"Movimiento {movimiento.tipo.value} registrado.",
+            metadata=_movement_audit_metadata(movimiento),
+        )
+    except Exception:
+        db.rollback()
+
+
+def _audit_movimiento_api_key(
+    movimiento: MovimientoResponse,
+    actor_api_key_id: UUID,
+    db: Session,
+    *,
+    evento: str = "movimiento_registrado",
+    mensaje: str | None = None,
+) -> None:
+    try:
+        registrar_evento_api_key(
+            db,
+            organizacion_id=movimiento.organizacion_id,
+            actor_api_key_id=actor_api_key_id,
+            evento=evento,
+            mensaje=mensaje or f"Movimiento {movimiento.tipo.value} registrado.",
+            metadata=_movement_audit_metadata(movimiento),
         )
     except Exception:
         db.rollback()
@@ -291,6 +318,36 @@ def crear_deposito(datos: MovimientoDepositoCreate, current_user: DatosUsuarioTo
     db.add(destino)
     response = _commit(db, movimiento)
     _audit_movimiento(response, current_user, db)
+    return response
+
+
+def crear_deposito_api_key(
+    datos: MovimientoDepositoCreate,
+    *,
+    organizacion_id: UUID,
+    actor_api_key_id: UUID,
+    db: Session,
+) -> MovimientoResponse:
+    amount = _amount(datos.monto)
+    destino = _get_wallet_locked(db, datos.wallet_destino_id, "destino")
+    organization_id = _ensure_same_api_key_organization([destino], organizacion_id)
+    _ensure_active(destino, "destino")
+
+    destino.saldo = _amount(destino.saldo) + amount
+    movimiento = _create_movement(
+        db,
+        origen=None,
+        destino=destino,
+        amount=amount,
+        tipo=TipoMovimiento.deposito,
+        organization_id=organization_id,
+        descripcion=datos.descripcion,
+        referencia_externa=datos.referencia_externa,
+        metadata=datos.metadata,
+    )
+    db.add(destino)
+    response = _commit(db, movimiento)
+    _audit_movimiento_api_key(response, actor_api_key_id, db)
     return response
 
 
@@ -382,15 +439,13 @@ def _audit_pago_organizacion(
 ) -> None:
     try:
         metadata = {**_movement_audit_metadata(movimiento), "tipo_operacion": "pago_organizacion"}
-        registrar_audit_log(
-            AuditLogCreate(
-                evento="pago_organizacion_realizado",
-                mensaje="Pago a organizacion registrado.",
-                actor_usuario_id=current_user.id,
-                organizacion_id=movimiento.organizacion_id,
-                metadata=metadata,
-            ),
+        registrar_evento_usuario(
             db,
+            organizacion_id=movimiento.organizacion_id,
+            actor_usuario_id=current_user.id,
+            evento="pago_organizacion_realizado",
+            mensaje="Pago a organizacion registrado.",
+            metadata=metadata,
         )
     except Exception:
         db.rollback()
@@ -466,6 +521,36 @@ def crear_cashback(datos: MovimientoCashbackCreate, current_user: DatosUsuarioTo
     db.add(destino)
     response = _commit(db, movimiento)
     _audit_movimiento(response, current_user, db)
+    return response
+
+
+def crear_cashback_api_key(
+    datos: MovimientoCashbackCreate,
+    *,
+    organizacion_id: UUID,
+    actor_api_key_id: UUID,
+    db: Session,
+) -> MovimientoResponse:
+    amount = _amount(datos.monto)
+    destino = _get_wallet_locked(db, datos.wallet_destino_id, "destino")
+    organization_id = _ensure_same_api_key_organization([destino], organizacion_id)
+    _ensure_active(destino, "destino")
+
+    destino.saldo = _amount(destino.saldo) + amount
+    movimiento = _create_movement(
+        db,
+        origen=None,
+        destino=destino,
+        amount=amount,
+        tipo=TipoMovimiento.cashback,
+        organization_id=organization_id,
+        descripcion=datos.descripcion,
+        referencia_externa=datos.referencia_externa,
+        metadata=datos.metadata,
+    )
+    db.add(destino)
+    response = _commit(db, movimiento)
+    _audit_movimiento_api_key(response, actor_api_key_id, db)
     return response
 
 

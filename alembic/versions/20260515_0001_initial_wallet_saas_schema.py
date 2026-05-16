@@ -298,16 +298,21 @@ def upgrade() -> None:
         sa.Column("evento", sa.String(length=120), nullable=False),
         sa.Column("mensaje", sa.String(length=500), nullable=False),
         sa.Column("nivel", sa.String(length=20), nullable=False),
+        sa.Column("actor_tipo", sa.String(length=20), nullable=False),
         sa.Column("actor_usuario_id", uuid_pk, nullable=True),
+        sa.Column("actor_api_key_id", uuid_pk, nullable=True),
         sa.Column("organizacion_id", uuid_pk, nullable=True),
         sa.Column("endpoint", sa.String(length=255), nullable=True),
         sa.Column("ip", sa.String(length=80), nullable=True),
         sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("fecha", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["actor_api_key_id"], ["api_keys.id"]),
         sa.ForeignKeyConstraint(["actor_usuario_id"], ["usuarios.id"]),
         sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index("ix_audit_logs_actor_api_key_id", "audit_logs", ["actor_api_key_id"], unique=False)
+    op.create_index("ix_audit_logs_actor_tipo", "audit_logs", ["actor_tipo"], unique=False)
     op.create_index("ix_audit_logs_evento", "audit_logs", ["evento"], unique=False)
     op.create_index("ix_audit_logs_id", "audit_logs", ["id"], unique=False)
     op.create_index("ix_audit_logs_organizacion_id", "audit_logs", ["organizacion_id"], unique=False)

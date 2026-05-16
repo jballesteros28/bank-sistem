@@ -12,11 +12,10 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.apps.auditoria.schemas import AuditLogCreate
-from app.apps.auditoria.services import registrar_audit_log
+from app.apps.auditoria.services import registrar_evento_sistema
 from app.apps.integraciones.models import WebhookDelivery, WebhookEndpoint
 from app.apps.integraciones.schemas import ALLOWED_WEBHOOK_EVENTS
-from app.apps.integraciones.services import decrypt_secret
+from app.apps.integraciones.services import decrypt_webhook_secret
 from app.core.database import SessionLocal
 
 
@@ -98,28 +97,26 @@ def encolar_webhook_evento(
     for delivery in deliveries:
         db.refresh(delivery)
         if background_tasks is not None:
-            background_tasks.add_task(enviar_webhook_delivery, delivery.id, db)
+            background_tasks.add_task(enviar_webhook_delivery, delivery.id)
     return deliveries
 
 
 def _audit_delivery(db: Session, delivery: WebhookDelivery, *, success: bool) -> None:
     try:
-        registrar_audit_log(
-            AuditLogCreate(
-                evento="webhook_enviado" if success else "webhook_fallido",
-                mensaje="Webhook enviado." if success else "Webhook fallido.",
-                nivel="INFO" if success else "ERROR",
-                organizacion_id=delivery.organizacion_id,
-                metadata={
-                    "delivery_id": str(delivery.id),
-                    "webhook_endpoint_id": str(delivery.webhook_endpoint_id),
-                    "evento": delivery.evento,
-                    "status": delivery.status,
-                    "status_code": delivery.status_code,
-                    "intentos": delivery.intentos,
-                },
-            ),
+        registrar_evento_sistema(
             db,
+            organizacion_id=delivery.organizacion_id,
+            evento="webhook_enviado" if success else "webhook_fallido",
+            mensaje="Webhook enviado." if success else "Webhook fallido.",
+            nivel="INFO" if success else "ERROR",
+            metadata={
+                "delivery_id": str(delivery.id),
+                "webhook_endpoint_id": str(delivery.webhook_endpoint_id),
+                "evento": delivery.evento,
+                "status": delivery.status,
+                "status_code": delivery.status_code,
+                "intentos": delivery.intentos,
+            },
         )
     except Exception:
         db.rollback()
@@ -129,26 +126,27 @@ def _send_delivery(delivery_id: UUID, db: Session) -> None:
     delivery = db.get(WebhookDelivery, delivery_id)
     if delivery is None:
         return
+    delivery.intentos += 1
+    delivery.fecha_ultimo_intento = _now()
     endpoint = db.get(WebhookEndpoint, delivery.webhook_endpoint_id)
     if endpoint is None or not endpoint.activo:
         delivery.status = "fallido"
         delivery.error = "Webhook endpoint inactivo."
-        delivery.fecha_ultimo_intento = _now()
+        delivery.status_code = None
         db.add(delivery)
         db.commit()
+        db.refresh(delivery)
         _audit_delivery(db, delivery, success=False)
         return
 
-    delivery.intentos += 1
-    delivery.fecha_ultimo_intento = _now()
-    secret = decrypt_secret(endpoint.secret_encrypted)
-    headers = {
-        "Content-Type": "application/json",
-        "X-Wallet-Signature": firmar_payload(delivery.payload, secret),
-        "X-Wallet-Event": delivery.evento,
-        "X-Wallet-Delivery-Id": str(delivery.id),
-    }
     try:
+        secret = decrypt_webhook_secret(endpoint.secret_encrypted)
+        headers = {
+            "Content-Type": "application/json",
+            "X-Wallet-Signature": firmar_payload(delivery.payload, secret),
+            "X-Wallet-Event": delivery.evento,
+            "X-Wallet-Delivery-Id": str(delivery.id),
+        }
         with httpx.Client(timeout=2.0) as client:
             response = client.post(endpoint.url, json=delivery.payload, headers=headers)
         delivery.status_code = response.status_code
@@ -168,12 +166,11 @@ def _send_delivery(delivery_id: UUID, db: Session) -> None:
     _audit_delivery(db, delivery, success=delivery.status == "enviado")
 
 
-def enviar_webhook_delivery(delivery_id: UUID, db: Session | None = None) -> None:
-    if db is not None:
-        _send_delivery(delivery_id, db)
-        return
+def enviar_webhook_delivery(delivery_id: UUID) -> None:
     session = SessionLocal()
     try:
         _send_delivery(delivery_id, session)
+    except Exception:
+        session.rollback()
     finally:
         session.close()

@@ -34,6 +34,7 @@ class APIKey(Base):
     fecha_revocacion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     organizacion: Mapped["Organizacion"] = relationship()
+    audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="actor_api_key")
 
 
 class WebhookEndpoint(Base):

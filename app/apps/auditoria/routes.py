@@ -34,9 +34,9 @@ def post_log(
     current_user: DatosUsuarioToken = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> ApiResponse[AuditLogResponse]:
-    if datos.actor_usuario_id is None:
+    if datos.actor_usuario_id is None and datos.actor_api_key_id is None:
+        datos.actor_tipo = "usuario"
         datos.actor_usuario_id = current_user.id
     if datos.organizacion_id is None:
         datos.organizacion_id = current_user.organizacion_id
     return ok(registrar_audit_log(datos, db), "Log de auditoria registrado.")
-

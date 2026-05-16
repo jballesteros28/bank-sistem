@@ -17,7 +17,13 @@ class AuditLog(Base):
     evento: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     mensaje: Mapped[str] = mapped_column(String(500), nullable=False)
     nivel: Mapped[str] = mapped_column(String(20), nullable=False, default="INFO")
+    actor_tipo: Mapped[str] = mapped_column(String(20), nullable=False, default="usuario", index=True)
     actor_usuario_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("usuarios.id"))
+    actor_api_key_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("api_keys.id"),
+        index=True,
+    )
     organizacion_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("organizaciones.id"),
@@ -33,4 +39,5 @@ class AuditLog(Base):
     )
 
     actor_usuario: Mapped["Usuario | None"] = relationship(back_populates="audit_logs")
+    actor_api_key: Mapped["APIKey | None"] = relationship(back_populates="audit_logs")
     organizacion: Mapped["Organizacion | None"] = relationship(back_populates="audit_logs")
