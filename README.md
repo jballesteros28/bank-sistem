@@ -90,6 +90,15 @@ npm run build
 npm run preview
 ```
 
+Validacion frontend completada en FASE 14.1.1:
+
+- `npm install`: OK, con `package-lock.json` generado.
+- `npm run lint`: OK.
+- `npm run build`: OK.
+- `npm run dev`: OK en `http://127.0.0.1:5173`.
+- Rutas validadas: `/login`, `/onboarding`, `/dashboard`, `/wallets`, `/movimientos`.
+- Las rutas privadas renderizan login cuando no hay token.
+
 ## Endpoints principales
 
 - `GET /health`
@@ -358,6 +367,107 @@ Rutas:
 - Publicas: `/login`, `/onboarding`
 - Privadas: `/dashboard`, `/wallets`, `/movimientos`, `/notificaciones`, `/branding`, `/planes`, `/integraciones`
 
+Flujo Auth + Onboarding validado para FASE 14.2:
+
+1. Ir a `/onboarding`.
+2. Crear la organizacion con `nombre`, `slug` y `email_contacto`.
+3. Crear el owner con `nombre`, `email`, `password` y confirmacion de password.
+4. El frontend envia `POST /api/v1/onboarding/registro-organizacion` con:
+
+```json
+{
+  "organizacion": {
+    "nombre": "Mi Comercio",
+    "slug": "mi-comercio",
+    "email_contacto": "contacto@micomercio.test"
+  },
+  "owner": {
+    "nombre": "Owner Demo",
+    "email": "owner@micomercio.test",
+    "password": "Password123!"
+  }
+}
+```
+
+5. Al crear correctamente, redirige a `/login` con un mensaje de exito.
+6. Login usa `POST /api/v1/auth/login` con JSON `{ "email": "...", "password": "..." }`. El backend devuelve `access_token` y `token_type`.
+7. El frontend guarda el token, consulta `GET /api/v1/auth/me`, guarda el usuario y redirige a `/dashboard`.
+8. Al recargar una ruta privada, Zustand hidrata desde `localStorage`; si hay token sin usuario, `ProtectedRoute` vuelve a consultar `/auth/me`.
+9. Si `/auth/me` devuelve `401`, se limpia la sesion y se redirige a `/login`.
+10. `GET /api/v1/organizaciones/me/branding` se consulta post-login para mostrar `nombre_comercial`, `logo_url` y aplicar `color_primario`/`color_secundario`.
+
+Credenciales de prueba:
+
+- No hay credenciales fijas versionadas para el frontend.
+- Para probar manualmente, crear una organizacion nueva desde `/onboarding` y usar el email/password del owner creado.
+
 El cliente HTTP usa `VITE_API_BASE_URL + VITE_API_PREFIX`, agrega `Authorization: Bearer <token>`, desempaqueta respuestas `{ success, message, data }` y limpia la sesion ante `401`. El token queda en `localStorage` por ahora; queda marcado el TODO para migrar a cookies HttpOnly en produccion.
 
 El branding dinamico se prepara desde `GET /api/v1/organizaciones/me/branding` y aplica `nombre_comercial`, `logo_url`, `color_primario` y `color_secundario` al layout cuando hay sesion.
+
+### Validacion E2E Auth + Onboarding
+
+Levantar backend:
+
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Validar backend:
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/docs
+curl http://127.0.0.1:8000/openapi.json
+```
+
+Levantar frontend:
+
+```bash
+npm run dev -- --host 127.0.0.1 --port 5174
+```
+
+Variables frontend esperadas, por `.env`, `.env.local` o defaults del cliente HTTP:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_PREFIX=/api/v1
+```
+
+Flujo probado contra backend real:
+
+- `/onboarding`: crear organizacion con slug unico, owner y password `Password123!`.
+- Redireccion a `/login` con mensaje de exito.
+- `/login`: autenticar owner creado.
+- Guardado de token y usuario en `localStorage`.
+- `/dashboard`: muestra usuario, rol `owner`, organizacion/branding y cards iniciales.
+- Refresh de `/dashboard`: mantiene sesion y revalida `/auth/me`.
+- Logout: elimina token/user y vuelve a `/login`.
+- `/wallets` sin token: redirige a `/login`.
+- Token invalido en `localStorage`: `/auth/me` responde `401`, se limpia sesion y redirige a `/login`.
+
+Datos de ejemplo usados en E2E:
+
+```text
+Organizacion: Demo Wallet E2E UI
+Slug: demo-wallet-ui-YYYYMMDDHHMMSS
+Email contacto: demo-ui-YYYYMMDDHHMMSS@example.com
+Owner: Owner Demo
+Owner email: owner-ui-YYYYMMDDHHMMSS@example.com
+Password: Password123!
+```
+
+Troubleshooting:
+
+- Si el navegador muestra `Network Error` pero `curl`/PowerShell contra la API funciona, revisar CORS. El backend permite `localhost` y `127.0.0.1` para Vite en `5173` y `5174`.
+- Si una ruta privada vuelve a `/login`, revisar que exista `wallet_saas_token` y que `GET /api/v1/auth/me` devuelva `200`.
+- Si el token esta vencido o malformado, el comportamiento esperado es `401`, limpieza de storage y redireccion a `/login`.
+- Si Vite cambia de puerto, agregar ese origin a `allow_origins` o iniciar Vite explicitamente con `--port 5173`/`5174`.
+
+Validacion local completada:
+
+- `GET /health`, `/docs` y `/openapi.json`: OK.
+- UI E2E con Chrome headless/CDP: OK.
+- `npm run lint`: OK.
+- `npm run build`: OK.
+- `python -m pytest -q`: OK.

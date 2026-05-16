@@ -1,39 +1,77 @@
 import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from "./constants";
 
-export function getStoredToken() {
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+function getLocalStorage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage;
 }
 
-export function setStoredToken(token) {
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+export function getToken() {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return null;
+  }
+  return storage.getItem(AUTH_TOKEN_KEY);
 }
 
-export function removeStoredToken() {
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+export function setToken(token) {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+  storage.setItem(AUTH_TOKEN_KEY, token);
 }
 
-export function getStoredUser() {
-  const raw = window.localStorage.getItem(AUTH_USER_KEY);
+export function removeToken() {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+  storage.removeItem(AUTH_TOKEN_KEY);
+}
+
+export function getUser() {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return null;
+  }
+  const raw = storage.getItem(AUTH_USER_KEY);
   if (!raw) {
     return null;
   }
   try {
     return JSON.parse(raw);
   } catch {
-    window.localStorage.removeItem(AUTH_USER_KEY);
+    storage.removeItem(AUTH_USER_KEY);
     return null;
   }
 }
 
-export function setStoredUser(user) {
-  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+export function setUser(user) {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+  storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
 }
 
-export function removeStoredUser() {
-  window.localStorage.removeItem(AUTH_USER_KEY);
+export function removeUser() {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+  storage.removeItem(AUTH_USER_KEY);
 }
 
 export function clearAuthStorage() {
-  removeStoredToken();
-  removeStoredUser();
+  removeToken();
+  removeUser();
 }
+
+export const getStoredToken = getToken;
+export const setStoredToken = setToken;
+export const removeStoredToken = removeToken;
+export const getStoredUser = getUser;
+export const setStoredUser = setUser;
+export const removeStoredUser = removeUser;

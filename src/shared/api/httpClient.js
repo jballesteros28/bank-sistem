@@ -1,7 +1,7 @@
 import axios from "axios";
 
 import { useAuthStore } from "../../features/auth/store";
-import { getStoredToken } from "../utils/storage";
+import { getToken } from "../utils/storage";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 const apiPrefix = import.meta.env.VITE_API_PREFIX || "/api/v1";
@@ -18,7 +18,7 @@ export const httpClient = axios.create({
 });
 
 httpClient.interceptors.request.use((config) => {
-  const token = getStoredToken();
+  const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

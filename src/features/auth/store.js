@@ -2,52 +2,62 @@ import { create } from "zustand";
 
 import {
   clearAuthStorage,
-  getStoredToken,
-  getStoredUser,
-  removeStoredToken,
-  removeStoredUser,
-  setStoredToken,
-  setStoredUser,
+  getToken,
+  getUser,
+  removeToken,
+  removeUser,
+  setToken,
+  setUser as setStoredUser,
 } from "../../shared/utils/storage";
 
-const initialToken = getStoredToken();
-const initialUser = getStoredUser();
-
-export const useAuthStore = create((set) => ({
-  token: initialToken,
-  user: initialUser,
-  isAuthenticated: Boolean(initialToken),
+export const useAuthStore = create((set, get) => ({
+  token: null,
+  user: null,
+  isAuthenticated: false,
+  isHydrated: false,
   loginSuccess: (token, user) => {
     // TODO: migrar el token a cookies HttpOnly en produccion.
-    setStoredToken(token);
+    setToken(token);
     if (user) {
       setStoredUser(user);
+    } else {
+      removeUser();
     }
-    set({ token, user: user || null, isAuthenticated: true });
+    set({ token, user: user || null, isAuthenticated: Boolean(token), isHydrated: true });
   },
   setUser: (user) => {
     if (user) {
       setStoredUser(user);
     } else {
-      removeStoredUser();
+      removeUser();
     }
     set({ user });
   },
+  updateUser: (user) => {
+    const currentUser = get().user || {};
+    const nextUser = user ? { ...currentUser, ...user } : null;
+    if (nextUser) {
+      setStoredUser(nextUser);
+    } else {
+      removeUser();
+    }
+    set({ user: nextUser });
+  },
   logout: ({ redirect = true } = {}) => {
     clearAuthStorage();
-    set({ token: null, user: null, isAuthenticated: false });
+    set({ token: null, user: null, isAuthenticated: false, isHydrated: true });
     if (redirect && window.location.pathname !== "/login") {
       window.location.assign("/login");
     }
   },
   hydrateFromStorage: () => {
-    const token = getStoredToken();
-    const user = getStoredUser();
-    set({ token, user, isAuthenticated: Boolean(token) });
+    const token = getToken();
+    const user = getUser();
+    set({ token, user, isAuthenticated: Boolean(token), isHydrated: true });
   },
   clearSessionOnly: () => {
-    removeStoredToken();
-    removeStoredUser();
-    set({ token: null, user: null, isAuthenticated: false });
+    removeToken();
+    removeUser();
+    set({ token: null, user: null, isAuthenticated: false, isHydrated: true });
   },
 }));

@@ -6,16 +6,9 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
 function applyBranding(branding) {
-  if (!branding) {
-    return;
-  }
   const root = document.documentElement;
-  if (branding.color_primario) {
-    root.style.setProperty("--color-primary", branding.color_primario);
-  }
-  if (branding.color_secundario) {
-    root.style.setProperty("--color-secondary", branding.color_secundario);
-  }
+  root.style.setProperty("--color-primary", branding?.color_primario || "#0f766e");
+  root.style.setProperty("--color-secondary", branding?.color_secundario || "#2563eb");
 }
 
 export function AppLayout() {

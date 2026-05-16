@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "../shared/components/layout/AppLayout";
 import { AuthLayout } from "../shared/components/layout/AuthLayout";
 import { ProtectedRoute } from "../shared/components/layout/ProtectedRoute";
+import { LoadingScreen } from "../shared/components/feedback/LoadingScreen";
 import { useAuthStore } from "../features/auth/store";
 import { LoginPage } from "../features/auth/pages/LoginPage";
 import { OnboardingPage } from "../features/onboarding/pages/OnboardingPage";
@@ -15,7 +16,13 @@ import { PlanesPage } from "../features/planes/pages/PlanesPage";
 import { IntegracionesPage } from "../features/integraciones/pages/IntegracionesPage";
 
 function RootRedirect() {
-  const isAuthenticated = useAuthStore.getState().isAuthenticated;
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
+
+  if (!isHydrated) {
+    return <LoadingScreen label="Preparando sesion" />;
+  }
+
   return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
 }
 

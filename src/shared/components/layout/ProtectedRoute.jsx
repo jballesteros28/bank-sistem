@@ -1,20 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
-import { getCurrentUser } from "../../../features/auth/api";
+import { useCurrentUser } from "../../../features/auth/hooks/useCurrentUser";
 import { LoadingScreen } from "../feedback/LoadingScreen";
 import { useAuth } from "../../hooks/useAuth";
 
 export function ProtectedRoute({ children }) {
   const location = useLocation();
-  const { token, user, isAuthenticated, setUser, logout } = useAuth();
+  const { token, user, isAuthenticated, isHydrated, setUser, logout } = useAuth();
 
-  const userQuery = useQuery({
-    queryKey: ["auth", "me"],
-    queryFn: getCurrentUser,
-    enabled: Boolean(token && !user),
-    retry: false,
+  const userQuery = useCurrentUser({
+    enabled: isHydrated && Boolean(token && !user),
   });
 
   useEffect(() => {
@@ -23,16 +19,25 @@ export function ProtectedRoute({ children }) {
     }
   }, [setUser, user, userQuery.data, userQuery.isSuccess]);
 
+  useEffect(() => {
+    if (userQuery.isError) {
+      logout({ redirect: false });
+    }
+  }, [logout, userQuery.isError]);
+
+  if (!isHydrated) {
+    return <LoadingScreen label="Preparando sesion" />;
+  }
+
   if (!token || !isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   if (userQuery.isError) {
-    logout({ redirect: false });
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (!user && userQuery.isLoading) {
+  if (!user) {
     return <LoadingScreen label="Validando sesion" />;
   }
 

@@ -1,12 +1,17 @@
 import { Link, Navigate } from "react-router-dom";
 
+import { LoadingScreen } from "../../../shared/components/feedback/LoadingScreen";
 import { Card } from "../../../shared/components/ui/Card";
 import { useAuth } from "../../../shared/hooks/useAuth";
 import { APP_NAME } from "../../../shared/utils/constants";
 import { OnboardingForm } from "../components/OnboardingForm";
 
 export function OnboardingPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isHydrated } = useAuth();
+
+  if (!isHydrated) {
+    return <LoadingScreen label="Preparando sesion" />;
+  }
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
