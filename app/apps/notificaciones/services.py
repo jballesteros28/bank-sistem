@@ -233,6 +233,18 @@ def crear_notificacion_y_email(
         metadata=metadata,
         actor_usuario_id=actor_usuario_id,
     )
+    try:
+        from app.apps.integraciones.webhook_dispatcher import encolar_webhook_evento
+
+        encolar_webhook_evento(
+            evento="notificacion.creada",
+            organizacion_id=organizacion.id,
+            data=interna.model_dump(mode="json", by_alias=True),
+            db=db,
+            background_tasks=background_tasks,
+        )
+    except Exception:
+        db.rollback()
     if usuario is None:
         return interna
 

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
+from app.apps.integraciones.webhook_dispatcher import encolar_webhook_evento
 from app.apps.notificaciones.services import notificar_movimiento, notificar_pago_organizacion
 from app.apps.movimientos.schemas import (
     MovimientoAjusteAdminCreate,
@@ -36,6 +37,10 @@ from app.shared.responses import ApiResponse, ok
 router = APIRouter(prefix="/movimientos", tags=["Movimientos"])
 
 
+def _movimiento_payload(movimiento: MovimientoResponse) -> dict[str, object]:
+    return movimiento.model_dump(mode="json", by_alias=True)
+
+
 @router.post("/deposito", response_model=ApiResponse[MovimientoResponse], status_code=status.HTTP_201_CREATED)
 def post_deposito(
     datos: MovimientoDepositoCreate,
@@ -45,6 +50,13 @@ def post_deposito(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_deposito(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Deposito creado correctamente.")
 
 
@@ -57,6 +69,13 @@ def post_retiro(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_retiro(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Retiro creado correctamente.")
 
 
@@ -69,6 +88,13 @@ def post_transferencia(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_transferencia(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Transferencia creada correctamente.")
 
 
@@ -81,6 +107,13 @@ def post_pago(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_pago(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Pago creado correctamente.")
 
 
@@ -93,6 +126,20 @@ def post_pago_organizacion(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_pago_a_organizacion(datos, current_user, db)
     notificar_pago_organizacion(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
+    encolar_webhook_evento(
+        evento="pago_organizacion.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Pago a organizacion creado correctamente.")
 
 
@@ -105,6 +152,13 @@ def post_cashback(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_cashback(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Cashback creado correctamente.")
 
 
@@ -117,6 +171,13 @@ def post_ajuste_admin(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_ajuste_admin(datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.creado",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Ajuste administrativo creado correctamente.")
 
 
@@ -130,6 +191,13 @@ def post_reversa(
 ) -> ApiResponse[MovimientoResponse]:
     movimiento = crear_reversa(movimiento_id, datos, current_user, db)
     notificar_movimiento(movimiento, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="movimiento.revertido",
+        organizacion_id=movimiento.organizacion_id,
+        data=_movimiento_payload(movimiento),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(movimiento, "Reversa creada correctamente.")
 
 

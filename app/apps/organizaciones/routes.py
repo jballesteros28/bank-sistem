@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
+from app.apps.integraciones.webhook_dispatcher import encolar_webhook_evento
 from app.apps.notificaciones.services import notificar_organizacion_suspendida
 from app.apps.organizaciones.branding_service import (
     actualizar_branding_organizacion,
@@ -22,6 +23,7 @@ from app.apps.organizaciones.services import (
     obtener_organizacion,
 )
 from app.core.database import get_db
+from app.shared.enums import EstadoOrganizacion
 from app.shared.responses import ApiResponse, ok
 
 
@@ -117,4 +119,12 @@ def patch_organizacion(
 ) -> ApiResponse[OrganizacionResponse]:
     organizacion = actualizar_organizacion(organizacion_id, datos, current_user, db)
     notificar_organizacion_suspendida(organizacion.id, db, background_tasks, actor_usuario_id=current_user.id)
+    if organizacion.estado == EstadoOrganizacion.suspendida:
+        encolar_webhook_evento(
+            evento="organizacion.suspendida",
+            organizacion_id=organizacion.id,
+            data=organizacion.model_dump(mode="json"),
+            db=db,
+            background_tasks=background_tasks,
+        )
     return ok(organizacion, "Organizacion actualizada correctamente.")

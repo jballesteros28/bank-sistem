@@ -108,6 +108,11 @@ pytest -q
 - `PATCH /api/v1/planes/organizaciones/{organizacion_id}/cambiar-plan`
 - `GET /api/v1/organizaciones/me/branding`
 - `PATCH /api/v1/organizaciones/me/branding`
+- `POST /api/v1/integraciones/api-keys`
+- `GET /api/v1/integraciones/webhooks`
+- `GET /api/v1/ext/wallets/{wallet_id}`
+- `POST /api/v1/ext/movimientos/deposito`
+- `POST /api/v1/ext/movimientos/cashback`
 
 ## Wallets
 
@@ -174,6 +179,59 @@ Flujo comercial usuario a organizacion:
 Endpoint especifico:
 
 - `POST /api/v1/movimientos/pago-organizacion`: pago comercial interno desde usuario hacia organizacion.
+
+## Integraciones
+
+Las organizaciones pueden conectar sistemas externos mediante API Keys y Webhooks. Las API Keys pertenecen siempre a una organizacion, no reemplazan el login JWT y no se guardan en texto plano. La key real se muestra solo al crearla; luego el backend conserva `key_prefix` para identificacion y `key_hash` para validacion.
+
+Scopes iniciales:
+
+- `wallets:read`
+- `wallets:write`
+- `movimientos:read`
+- `movimientos:write`
+- `usuarios:read`
+- `usuarios:write`
+- `webhooks:read`
+- `webhooks:write`
+
+Uso externo:
+
+```http
+X-API-Key: wsk_test_xxxxxxxxx
+```
+
+Endpoints externos iniciales:
+
+- `GET /api/v1/ext/wallets/{wallet_id}` requiere `wallets:read`.
+- `POST /api/v1/ext/movimientos/deposito` requiere `movimientos:write`.
+- `POST /api/v1/ext/movimientos/cashback` requiere `movimientos:write`.
+- `GET /api/v1/ext/movimientos` requiere `movimientos:read`.
+
+Los endpoints externos operan solo dentro de la organizacion de la API Key. Nunca aceptan `organizacion_id` como fuente confiable.
+
+Webhooks:
+
+- Los endpoints se administran en `POST/GET/PATCH/DELETE /api/v1/integraciones/webhooks`.
+- Cada webhook define `url`, `eventos` y un `secret` usado para firmar.
+- Cada delivery incluye firma HMAC SHA256 en `X-Wallet-Signature`.
+- Tambien se envian `X-Wallet-Event` y `X-Wallet-Delivery-Id`.
+- Los errores de envio no bloquean la operacion principal; quedan registrados como deliveries `fallido`.
+
+Eventos soportados:
+
+- `wallet.creada`
+- `movimiento.creado`
+- `movimiento.revertido`
+- `pago_organizacion.creado`
+- `notificacion.creada`
+- `organizacion.suspendida`
+
+Planes:
+
+- `free` y `starter` no permiten crear webhooks porque `permite_webhooks=False`.
+- `pro` y `enterprise` habilitan webhooks.
+- Las API Keys pueden usarse en todos los planes, pero los endpoints siguen respetando limites de wallets y movimientos del plan.
 
 ## Planes SaaS
 

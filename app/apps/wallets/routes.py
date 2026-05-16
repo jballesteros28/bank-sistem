@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.apps.auth.dependencies import get_current_user
 from app.apps.auth.schemas import DatosUsuarioToken
+from app.apps.integraciones.webhook_dispatcher import encolar_webhook_evento
 from app.apps.notificaciones.services import (
     notificar_wallet_congelada,
     notificar_wallet_creada,
@@ -46,6 +47,13 @@ def post_wallet(
 ) -> ApiResponse[WalletResponse]:
     wallet = crear_wallet(datos, current_user, db)
     notificar_wallet_creada(wallet, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="wallet.creada",
+        organizacion_id=wallet.organizacion_id,
+        data=wallet.model_dump(mode="json"),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(wallet, "Wallet creada correctamente.")
 
 
@@ -58,6 +66,13 @@ def post_wallet_organizacion(
 ) -> ApiResponse[WalletResponse]:
     wallet = crear_wallet_organizacion(datos, current_user, db)
     notificar_wallet_organizacion_creada(wallet, db, background_tasks, actor_usuario_id=current_user.id)
+    encolar_webhook_evento(
+        evento="wallet.creada",
+        organizacion_id=wallet.organizacion_id,
+        data=wallet.model_dump(mode="json"),
+        db=db,
+        background_tasks=background_tasks,
+    )
     return ok(wallet, "Wallet de organizacion creada correctamente.")
 
 

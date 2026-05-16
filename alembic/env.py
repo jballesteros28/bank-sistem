@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.database import Base
 
 from app.apps.auditoria.models import AuditLog  # noqa: F401
+from app.apps.integraciones.models import APIKey, WebhookDelivery, WebhookEndpoint  # noqa: F401
 from app.apps.movimientos.models import Movimiento  # noqa: F401
 from app.apps.notificaciones.models import Notificacion  # noqa: F401
 from app.apps.organizaciones.models import Organizacion  # noqa: F401

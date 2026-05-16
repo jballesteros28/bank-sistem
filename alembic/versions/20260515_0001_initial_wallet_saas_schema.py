@@ -227,6 +227,72 @@ def upgrade() -> None:
     op.create_index("ix_movimientos_wallet_origen_id", "movimientos", ["wallet_origen_id"], unique=False)
 
     op.create_table(
+        "api_keys",
+        _uuid_id_column(),
+        sa.Column("organizacion_id", uuid_pk, nullable=False),
+        sa.Column("nombre", sa.String(length=120), nullable=False),
+        sa.Column("key_prefix", sa.String(length=32), nullable=False),
+        sa.Column("key_hash", sa.String(length=128), nullable=False),
+        sa.Column("scopes", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("activa", sa.Boolean(), nullable=False),
+        sa.Column("ultimo_uso_en", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_revocacion", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("key_prefix"),
+    )
+    op.create_index("ix_api_keys_id", "api_keys", ["id"], unique=False)
+    op.create_index("ix_api_keys_key_prefix", "api_keys", ["key_prefix"], unique=True)
+    op.create_index("ix_api_keys_organizacion_id", "api_keys", ["organizacion_id"], unique=False)
+
+    op.create_table(
+        "webhook_endpoints",
+        _uuid_id_column(),
+        sa.Column("organizacion_id", uuid_pk, nullable=False),
+        sa.Column("nombre", sa.String(length=120), nullable=False),
+        sa.Column("url", sa.String(length=500), nullable=False),
+        sa.Column("eventos", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("secret_encrypted", sa.String(length=1000), nullable=False),
+        sa.Column("activo", sa.Boolean(), nullable=False),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_actualizacion", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_webhook_endpoints_id", "webhook_endpoints", ["id"], unique=False)
+    op.create_index("ix_webhook_endpoints_organizacion_id", "webhook_endpoints", ["organizacion_id"], unique=False)
+
+    op.create_table(
+        "webhook_deliveries",
+        _uuid_id_column(),
+        sa.Column("organizacion_id", uuid_pk, nullable=False),
+        sa.Column("webhook_endpoint_id", uuid_pk, nullable=False),
+        sa.Column("evento", sa.String(length=120), nullable=False),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("status", sa.String(length=30), nullable=False),
+        sa.Column("status_code", sa.Integer(), nullable=True),
+        sa.Column("respuesta_body", sa.Text(), nullable=True),
+        sa.Column("intentos", sa.Integer(), nullable=False),
+        sa.Column("error", sa.Text(), nullable=True),
+        sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("fecha_ultimo_intento", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["organizacion_id"], ["organizaciones.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["webhook_endpoint_id"], ["webhook_endpoints.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_webhook_deliveries_evento", "webhook_deliveries", ["evento"], unique=False)
+    op.create_index("ix_webhook_deliveries_id", "webhook_deliveries", ["id"], unique=False)
+    op.create_index("ix_webhook_deliveries_organizacion_id", "webhook_deliveries", ["organizacion_id"], unique=False)
+    op.create_index("ix_webhook_deliveries_status", "webhook_deliveries", ["status"], unique=False)
+    op.create_index(
+        "ix_webhook_deliveries_webhook_endpoint_id",
+        "webhook_deliveries",
+        ["webhook_endpoint_id"],
+        unique=False,
+    )
+
+    op.create_table(
         "audit_logs",
         _uuid_id_column(),
         sa.Column("evento", sa.String(length=120), nullable=False),
@@ -274,6 +340,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("notificaciones")
     op.drop_table("audit_logs")
+    op.execute("DROP TABLE IF EXISTS webhook_deliveries")
+    op.execute("DROP TABLE IF EXISTS webhook_endpoints")
+    op.execute("DROP TABLE IF EXISTS api_keys")
     op.drop_table("movimientos")
     op.drop_table("wallets")
     op.drop_table("usuarios")
