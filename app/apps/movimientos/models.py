@@ -9,23 +9,23 @@ from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Numeric, Strin
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.shared.enums import EstadoMovimiento, TipoMovimiento
+from app.shared.enums import EstadoMovimiento, MonedaWallet, TipoMovimiento
 
 
 class Movimiento(Base):
     __tablename__ = "movimientos"
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4, index=True)
-    wallet_origen_id: Mapped[UUID] = mapped_column(
+    wallet_origen_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("wallets.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    wallet_destino_id: Mapped[UUID] = mapped_column(
+    wallet_destino_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("wallets.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     organizacion_id: Mapped[UUID] = mapped_column(
@@ -35,6 +35,14 @@ class Movimiento(Base):
         index=True,
     )
     monto: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    moneda: Mapped[MonedaWallet] = mapped_column(
+        Enum(
+            MonedaWallet,
+            name="moneda_wallet",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     tipo: Mapped[TipoMovimiento] = mapped_column(
         Enum(
             TipoMovimiento,
@@ -69,11 +77,11 @@ class Movimiento(Base):
     )
 
     organizacion: Mapped["Organizacion"] = relationship(back_populates="movimientos")
-    wallet_origen: Mapped["Wallet"] = relationship(
+    wallet_origen: Mapped["Wallet | None"] = relationship(
         foreign_keys=[wallet_origen_id],
         back_populates="movimientos_origen",
     )
-    wallet_destino: Mapped["Wallet"] = relationship(
+    wallet_destino: Mapped["Wallet | None"] = relationship(
         foreign_keys=[wallet_destino_id],
         back_populates="movimientos_destino",
     )

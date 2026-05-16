@@ -25,7 +25,7 @@ from app.apps.movimientos.schemas import (
 from app.apps.planes.limit_service import validar_limite_movimientos_mes
 from app.apps.wallets.models import Wallet
 from app.core.permissions import can_consult_financial_info, is_financial_operator, is_super_admin
-from app.shared.enums import EstadoMovimiento, EstadoWallet, OwnerTypeWallet, RolUsuario, TipoMovimiento
+from app.shared.enums import EstadoMovimiento, EstadoWallet, MonedaWallet, OwnerTypeWallet, RolUsuario, TipoMovimiento
 from app.shared.utils import normalize_decimal
 
 
@@ -57,7 +57,15 @@ def _get_wallet_locked(db: Session, wallet_id: UUID, label: str) -> Wallet:
     return wallet
 
 
+def _get_wallet_locked_if_present(db: Session, wallet_id: UUID | None, label: str) -> Wallet | None:
+    if wallet_id is None:
+        return None
+    return _get_wallet_locked(db, wallet_id, label)
+
+
 def _ensure_same_organization(wallets: list[Wallet], current_user: DatosUsuarioToken) -> UUID:
+    if not wallets:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento debe referenciar una wallet.")
     organization_ids = {wallet.organizacion_id for wallet in wallets}
     if len(organization_ids) != 1:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No se puede operar entre organizaciones.")
@@ -89,14 +97,92 @@ def _ensure_balance(wallet: Wallet, amount: Decimal) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Saldo insuficiente.")
 
 
+def _operation_from_metadata(metadata: dict[str, Any] | None) -> str | None:
+    value = (metadata or {}).get("operacion")
+    return str(value) if value is not None else None
+
+
+def _validate_movement_consistency(
+    *,
+    tipo: TipoMovimiento,
+    wallet_origen_id: UUID | None,
+    wallet_destino_id: UUID | None,
+    operacion: str | None = None,
+) -> None:
+    if wallet_origen_id is not None and wallet_destino_id is not None and wallet_origen_id == wallet_destino_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede operar sobre la misma wallet.")
+
+    if tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback}:
+        if wallet_origen_id is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento no debe tener wallet origen.")
+        if wallet_destino_id is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento requiere wallet destino.")
+        return
+
+    if tipo == TipoMovimiento.retiro:
+        if wallet_origen_id is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento requiere wallet origen.")
+        if wallet_destino_id is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento no debe tener wallet destino.")
+        return
+
+    if tipo == TipoMovimiento.ajuste_admin:
+        if operacion == "credito":
+            if wallet_origen_id is not None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El credito no debe tener wallet origen.")
+            if wallet_destino_id is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El credito requiere wallet destino.")
+            return
+        if operacion == "debito":
+            if wallet_origen_id is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El debito requiere wallet origen.")
+            if wallet_destino_id is not None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El debito no debe tener wallet destino.")
+            return
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Operacion de ajuste invalida.")
+
+    if tipo in {TipoMovimiento.transferencia, TipoMovimiento.pago}:
+        if wallet_origen_id is None or wallet_destino_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El movimiento requiere wallet origen y destino.",
+            )
+        return
+
+    if tipo == TipoMovimiento.reversa:
+        if wallet_origen_id is None and wallet_destino_id is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La reversa debe referenciar una wallet.")
+        return
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tipo de movimiento invalido.")
+
+
+def _movement_currency(
+    *,
+    origen: Wallet | None,
+    destino: Wallet | None,
+    moneda: MonedaWallet | None = None,
+) -> MonedaWallet:
+    if moneda is not None:
+        return moneda
+    if origen is not None and destino is not None:
+        _ensure_same_currency(origen, destino)
+        return origen.moneda
+    wallet = destino or origen
+    if wallet is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento debe referenciar una wallet.")
+    return wallet.moneda
+
+
 def _create_movement(
     db: Session,
     *,
-    origen: Wallet,
-    destino: Wallet,
+    origen: Wallet | None,
+    destino: Wallet | None,
     amount: Decimal,
     tipo: TipoMovimiento,
     organization_id: UUID,
+    moneda: MonedaWallet | None = None,
     descripcion: str | None = None,
     referencia_externa: str | None = None,
     metadata: dict[str, Any] | None = None,
@@ -105,18 +191,26 @@ def _create_movement(
     es_reversa: bool = False,
     motivo_reversa: str | None = None,
 ) -> Movimiento:
+    cleaned_metadata = _json_metadata(metadata)
+    _validate_movement_consistency(
+        tipo=tipo,
+        wallet_origen_id=origen.id if origen is not None else None,
+        wallet_destino_id=destino.id if destino is not None else None,
+        operacion=_operation_from_metadata(cleaned_metadata),
+    )
     if estado == EstadoMovimiento.aprobada:
         validar_limite_movimientos_mes(db, organization_id)
     movimiento = Movimiento(
-        wallet_origen_id=origen.id,
-        wallet_destino_id=destino.id,
+        wallet_origen_id=origen.id if origen is not None else None,
+        wallet_destino_id=destino.id if destino is not None else None,
         organizacion_id=organization_id,
         monto=amount,
+        moneda=_movement_currency(origen=origen, destino=destino, moneda=moneda),
         tipo=tipo,
         estado=estado,
         descripcion=(descripcion or "").strip() or None,
         referencia_externa=referencia_externa,
-        metadata_movimiento=_json_metadata(metadata),
+        metadata_movimiento=cleaned_metadata,
         movimiento_origen_id=movimiento_origen_id,
         es_reversa=es_reversa,
         motivo_reversa=motivo_reversa,
@@ -135,6 +229,46 @@ def _commit(db: Session, movimiento: Movimiento) -> MovimientoResponse:
     return MovimientoResponse.model_validate(movimiento)
 
 
+def _movement_audit_metadata(movimiento: MovimientoResponse) -> dict[str, str]:
+    metadata = {
+        "movimiento_id": str(movimiento.id),
+        "tipo_operacion": movimiento.tipo.value,
+        "monto": str(movimiento.monto),
+        "moneda": movimiento.moneda.value,
+    }
+    if movimiento.wallet_origen_id is not None:
+        metadata["wallet_origen_id"] = str(movimiento.wallet_origen_id)
+    if movimiento.wallet_destino_id is not None:
+        metadata["wallet_destino_id"] = str(movimiento.wallet_destino_id)
+    operacion = _operation_from_metadata(movimiento.metadata_movimiento)
+    if operacion is not None:
+        metadata["operacion"] = operacion
+    return metadata
+
+
+def _audit_movimiento(
+    movimiento: MovimientoResponse,
+    current_user: DatosUsuarioToken,
+    db: Session,
+    *,
+    evento: str = "movimiento_registrado",
+    mensaje: str | None = None,
+) -> None:
+    try:
+        registrar_audit_log(
+            AuditLogCreate(
+                evento=evento,
+                mensaje=mensaje or f"Movimiento {movimiento.tipo.value} registrado.",
+                actor_usuario_id=current_user.id,
+                organizacion_id=movimiento.organizacion_id,
+                metadata=_movement_audit_metadata(movimiento),
+            ),
+            db,
+        )
+    except Exception:
+        db.rollback()
+
+
 def crear_deposito(datos: MovimientoDepositoCreate, current_user: DatosUsuarioToken, db: Session) -> MovimientoResponse:
     _ensure_operator(current_user)
     amount = _amount(datos.monto)
@@ -145,7 +279,7 @@ def crear_deposito(datos: MovimientoDepositoCreate, current_user: DatosUsuarioTo
     destino.saldo = _amount(destino.saldo) + amount
     movimiento = _create_movement(
         db,
-        origen=destino,
+        origen=None,
         destino=destino,
         amount=amount,
         tipo=TipoMovimiento.deposito,
@@ -155,7 +289,9 @@ def crear_deposito(datos: MovimientoDepositoCreate, current_user: DatosUsuarioTo
         metadata=datos.metadata,
     )
     db.add(destino)
-    return _commit(db, movimiento)
+    response = _commit(db, movimiento)
+    _audit_movimiento(response, current_user, db)
+    return response
 
 
 def crear_retiro(datos: MovimientoRetiroCreate, current_user: DatosUsuarioToken, db: Session) -> MovimientoResponse:
@@ -171,7 +307,7 @@ def crear_retiro(datos: MovimientoRetiroCreate, current_user: DatosUsuarioToken,
     movimiento = _create_movement(
         db,
         origen=origen,
-        destino=origen,
+        destino=None,
         amount=amount,
         tipo=TipoMovimiento.retiro,
         organization_id=organization_id,
@@ -180,7 +316,9 @@ def crear_retiro(datos: MovimientoRetiroCreate, current_user: DatosUsuarioToken,
         metadata=datos.metadata,
     )
     db.add(origen)
-    return _commit(db, movimiento)
+    response = _commit(db, movimiento)
+    _audit_movimiento(response, current_user, db)
+    return response
 
 
 def _crear_entre_wallets(
@@ -188,6 +326,8 @@ def _crear_entre_wallets(
     current_user: DatosUsuarioToken,
     db: Session,
     tipo: TipoMovimiento,
+    *,
+    metadata_extra: dict[str, Any] | None = None,
 ) -> MovimientoResponse:
     amount = _amount(datos.monto)
     origen = _get_wallet_locked(db, datos.wallet_origen_id, "origen")
@@ -205,6 +345,7 @@ def _crear_entre_wallets(
 
     origen.saldo = _amount(origen.saldo) - amount
     destino.saldo = _amount(destino.saldo) + amount
+    metadata = {**(datos.metadata or {}), **(metadata_extra or {})}
     movimiento = _create_movement(
         db,
         origen=origen,
@@ -214,10 +355,12 @@ def _crear_entre_wallets(
         organization_id=organization_id,
         descripcion=datos.descripcion,
         referencia_externa=datos.referencia_externa,
-        metadata=datos.metadata,
+        metadata=metadata,
     )
     db.add_all([origen, destino])
-    return _commit(db, movimiento)
+    response = _commit(db, movimiento)
+    _audit_movimiento(response, current_user, db)
+    return response
 
 
 def crear_transferencia(
@@ -238,18 +381,14 @@ def _audit_pago_organizacion(
     db: Session,
 ) -> None:
     try:
+        metadata = {**_movement_audit_metadata(movimiento), "tipo_operacion": "pago_organizacion"}
         registrar_audit_log(
             AuditLogCreate(
                 evento="pago_organizacion_realizado",
                 mensaje="Pago a organizacion registrado.",
                 actor_usuario_id=current_user.id,
                 organizacion_id=movimiento.organizacion_id,
-                metadata={
-                    "movimiento_id": str(movimiento.id),
-                    "wallet_origen_id": str(movimiento.wallet_origen_id),
-                    "wallet_destino_id": str(movimiento.wallet_destino_id),
-                    "monto": str(movimiento.monto),
-                },
+                metadata=metadata,
             ),
             db,
         )
@@ -286,6 +425,7 @@ def crear_pago_a_organizacion(
 
     origen.saldo = _amount(origen.saldo) - amount
     destino.saldo = _amount(destino.saldo) + amount
+    metadata = {**(datos.metadata or {}), "operacion": "pago_organizacion"}
     movimiento = _create_movement(
         db,
         origen=origen,
@@ -295,10 +435,11 @@ def crear_pago_a_organizacion(
         organization_id=organization_id,
         descripcion=datos.descripcion,
         referencia_externa=datos.referencia_externa,
-        metadata=datos.metadata,
+        metadata=metadata,
     )
     db.add_all([origen, destino])
     response = _commit(db, movimiento)
+    _audit_movimiento(response, current_user, db, mensaje="Pago registrado.")
     _audit_pago_organizacion(response, current_user, db)
     return response
 
@@ -313,7 +454,7 @@ def crear_cashback(datos: MovimientoCashbackCreate, current_user: DatosUsuarioTo
     destino.saldo = _amount(destino.saldo) + amount
     movimiento = _create_movement(
         db,
-        origen=destino,
+        origen=None,
         destino=destino,
         amount=amount,
         tipo=TipoMovimiento.cashback,
@@ -323,7 +464,9 @@ def crear_cashback(datos: MovimientoCashbackCreate, current_user: DatosUsuarioTo
         metadata=datos.metadata,
     )
     db.add(destino)
-    return _commit(db, movimiento)
+    response = _commit(db, movimiento)
+    _audit_movimiento(response, current_user, db)
+    return response
 
 
 def crear_ajuste_admin(
@@ -334,21 +477,25 @@ def crear_ajuste_admin(
     if not is_financial_operator(current_user.rol):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operacion restringida a operadores.")
     amount = _amount(datos.monto)
-    destino = _get_wallet_locked(db, datos.wallet_destino_id, "destino")
-    organization_id = _ensure_same_organization([destino], current_user)
-    _ensure_active(destino, "destino")
+    wallet = _get_wallet_locked(db, datos.wallet_id, "wallet")
+    organization_id = _ensure_same_organization([wallet], current_user)
+    _ensure_active(wallet, "wallet")
 
     if datos.operacion == "debito":
-        _ensure_limit(destino, amount)
-        _ensure_balance(destino, amount)
-        destino.saldo = _amount(destino.saldo) - amount
+        _ensure_limit(wallet, amount)
+        _ensure_balance(wallet, amount)
+        wallet.saldo = _amount(wallet.saldo) - amount
+        origen = wallet
+        destino = None
     else:
-        destino.saldo = _amount(destino.saldo) + amount
+        wallet.saldo = _amount(wallet.saldo) + amount
+        origen = None
+        destino = wallet
 
     metadata = {**(datos.metadata or {}), "operacion": datos.operacion, "motivo": datos.motivo}
     movimiento = _create_movement(
         db,
-        origen=destino,
+        origen=origen,
         destino=destino,
         amount=amount,
         tipo=TipoMovimiento.ajuste_admin,
@@ -357,8 +504,10 @@ def crear_ajuste_admin(
         referencia_externa=datos.referencia_externa,
         metadata=metadata,
     )
-    db.add(destino)
-    return _commit(db, movimiento)
+    db.add(wallet)
+    response = _commit(db, movimiento)
+    _audit_movimiento(response, current_user, db)
+    return response
 
 
 def _get_reversible_movement(db: Session, movimiento_id: UUID, current_user: DatosUsuarioToken) -> Movimiento:
@@ -376,6 +525,15 @@ def _get_reversible_movement(db: Session, movimiento_id: UUID, current_user: Dat
     return movimiento
 
 
+def _require_original_wallet(wallet: Wallet | None, label: str) -> Wallet:
+    if wallet is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El movimiento original no tiene wallet {label}.",
+        )
+    return wallet
+
+
 def crear_reversa(
     movimiento_id: UUID,
     datos: MovimientoReversaCreate,
@@ -384,50 +542,64 @@ def crear_reversa(
 ) -> MovimientoResponse:
     _ensure_operator(current_user)
     original = _get_reversible_movement(db, movimiento_id, current_user)
-    origen = _get_wallet_locked(db, original.wallet_origen_id, "origen")
-    destino = _get_wallet_locked(db, original.wallet_destino_id, "destino")
-    organization_id = _ensure_same_organization([origen, destino], current_user)
-    _ensure_active(origen, "origen")
-    _ensure_active(destino, "destino")
-    if origen.id != destino.id:
-        _ensure_same_currency(origen, destino)
+    original_origen = _get_wallet_locked_if_present(db, original.wallet_origen_id, "origen")
+    original_destino = _get_wallet_locked_if_present(db, original.wallet_destino_id, "destino")
+    wallets = [wallet for wallet in (original_origen, original_destino) if wallet is not None]
+    organization_id = _ensure_same_organization(wallets, current_user)
+    for wallet in wallets:
+        _ensure_active(wallet, "origen" if wallet.id == original.wallet_origen_id else "destino")
+    if original_origen is not None and original_destino is not None:
+        _ensure_same_currency(original_origen, original_destino)
 
     amount = _amount(original.monto)
-    reversa_origen = destino
-    reversa_destino = origen
+    reversa_origen: Wallet | None = None
+    reversa_destino: Wallet | None = None
 
     if original.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback}:
+        destino = _require_original_wallet(original_destino, "destino")
         _ensure_balance(destino, amount)
         destino.saldo = _amount(destino.saldo) - amount
         reversa_origen = destino
-        reversa_destino = destino
     elif original.tipo == TipoMovimiento.retiro:
+        origen = _require_original_wallet(original_origen, "origen")
         origen.saldo = _amount(origen.saldo) + amount
-        reversa_origen = origen
         reversa_destino = origen
     elif original.tipo == TipoMovimiento.ajuste_admin:
-        operation = (original.metadata_movimiento or {}).get("operacion")
-        if operation == "debito":
-            destino.saldo = _amount(destino.saldo) + amount
-        else:
+        operation = _operation_from_metadata(original.metadata_movimiento)
+        if operation == "credito":
+            destino = _require_original_wallet(original_destino, "destino")
             _ensure_balance(destino, amount)
             destino.saldo = _amount(destino.saldo) - amount
-        reversa_origen = destino
-        reversa_destino = destino
+            reversa_origen = destino
+        elif operation == "debito":
+            origen = _require_original_wallet(original_origen, "origen")
+            origen.saldo = _amount(origen.saldo) + amount
+            reversa_destino = origen
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Operacion de ajuste original invalida.")
     elif original.tipo in {TipoMovimiento.transferencia, TipoMovimiento.pago}:
+        origen = _require_original_wallet(original_origen, "origen")
+        destino = _require_original_wallet(original_destino, "destino")
         _ensure_balance(destino, amount)
         destino.saldo = _amount(destino.saldo) - amount
         origen.saldo = _amount(origen.saldo) + amount
+        reversa_origen = destino
+        reversa_destino = origen
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tipo de movimiento no reversible.")
 
     original.estado = EstadoMovimiento.revertida
-    metadata = {**(datos.metadata or {}), "movimiento_original_id": original.id}
+    metadata = {
+        **(datos.metadata or {}),
+        "movimiento_original_id": str(original.id),
+        "tipo_original": original.tipo.value,
+    }
     reversa = _create_movement(
         db,
         origen=reversa_origen,
         destino=reversa_destino,
         amount=amount,
+        moneda=original.moneda,
         tipo=TipoMovimiento.reversa,
         organization_id=organization_id,
         descripcion=f"Reversa de movimiento {original.id}",
@@ -437,8 +609,12 @@ def crear_reversa(
         es_reversa=True,
         motivo_reversa=datos.motivo_reversa,
     )
-    db.add_all([original, origen, destino])
-    return _commit(db, reversa)
+    db.add(original)
+    for wallet in wallets:
+        db.add(wallet)
+    response = _commit(db, reversa)
+    _audit_movimiento(response, current_user, db, evento="movimiento_revertido", mensaje="Reversa registrada.")
+    return response
 
 
 def listar_movimientos(
@@ -477,10 +653,15 @@ def obtener_movimiento(
     if not is_super_admin(current_user.rol) and movimiento.organizacion_id != current_user.organizacion_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movimiento no encontrado.")
     if not can_consult_financial_info(current_user.rol):
+        wallet_ids = [
+            wallet_id
+            for wallet_id in (movimiento.wallet_origen_id, movimiento.wallet_destino_id)
+            if wallet_id is not None
+        ]
         visible = db.scalar(
             select(Wallet.id).where(
                 Wallet.usuario_id == current_user.id,
-                Wallet.id.in_([movimiento.wallet_origen_id, movimiento.wallet_destino_id]),
+                Wallet.id.in_(wallet_ids),
             )
         )
         if visible is None:

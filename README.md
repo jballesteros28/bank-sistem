@@ -144,7 +144,25 @@ Endpoints principales:
 
 ## Movimientos
 
-Los movimientos registran cambios de saldo internos entre wallets de una misma organizacion. Todo movimiento aprobado consume `limite_movimientos_mes`.
+Los movimientos registran cambios de saldo internos dentro de una organizacion. Todo movimiento aprobado consume `limite_movimientos_mes`. El modelo distingue operaciones de una sola wallet de operaciones entre dos wallets:
+
+- Operaciones con una wallet:
+  - `deposito`: acredita una wallet destino. `wallet_origen_id=NULL`.
+  - `retiro`: debita una wallet origen. `wallet_destino_id=NULL`.
+  - `cashback`: acredita una wallet destino. `wallet_origen_id=NULL`.
+  - `ajuste_admin`: puede ser `credito` o `debito`; el credito usa solo destino y el debito usa solo origen.
+- Operaciones entre dos wallets:
+  - `transferencia`: debita origen y acredita destino.
+  - `pago`: debita origen y acredita destino.
+  - `pago-organizacion`: debita una wallet de usuario y acredita una wallet de organizacion.
+
+`wallet_origen_id` y `wallet_destino_id` son opcionales en la tabla `movimientos` para representar correctamente depositos, retiros, cashback, ajustes y reversas. Las operaciones entre dos wallets requieren ambos IDs y bloquean origen y destino iguales.
+
+Las reversas son contables: no borran el movimiento original. El backend crea un movimiento tipo `reversa`, guarda `movimiento_origen_id`, marca el original como `revertida` y mueve el saldo inverso segun el tipo original:
+
+- Deposito, cashback o ajuste credito: debita la wallet destino original.
+- Retiro o ajuste debito: acredita la wallet origen original.
+- Transferencia, pago o pago a organizacion: debita el destino original y acredita el origen original.
 
 Flujo comercial usuario a organizacion:
 

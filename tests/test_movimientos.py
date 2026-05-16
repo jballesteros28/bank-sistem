@@ -6,8 +6,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.apps.auditoria.models import AuditLog
+from app.apps.movimientos.models import Movimiento
 from app.apps.notificaciones.models import Notificacion
-from app.shared.enums import CanalNotificacion, MonedaWallet, RolUsuario, TipoNotificacion, TipoWallet
+from app.apps.wallets.models import Wallet
+from app.shared.enums import (
+    CanalNotificacion,
+    EstadoMovimiento,
+    MonedaWallet,
+    RolUsuario,
+    TipoNotificacion,
+    TipoWallet,
+)
 from tests.conftest import api_data, auth_headers, create_org, create_org_wallet, create_user, create_wallet
 
 
@@ -15,6 +24,151 @@ def _balance(client: TestClient, headers: dict[str, str], wallet_id: UUID) -> De
     response = client.get(f"/api/v1/wallets/{wallet_id}/balance", headers=headers)
     assert response.status_code == 200, response.text
     return Decimal(api_data(response)["saldo"])
+
+
+def _saldo_db(db: Session, wallet_id: UUID) -> Decimal:
+    db.expire_all()
+    wallet = db.get(Wallet, wallet_id)
+    assert wallet is not None
+    return wallet.saldo
+
+
+def test_deposito_crea_movimiento_con_origen_null_y_aumenta_saldo(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    response = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "40.00"},
+    )
+
+    assert response.status_code == 201, response.text
+    data = api_data(response)
+    assert data["wallet_origen_id"] is None
+    assert data["wallet_destino_id"] == str(wallet.id)
+    assert data["moneda"] == "ARS"
+    assert _saldo_db(db_session, wallet.id) == Decimal("40.00")
+
+
+def test_retiro_crea_movimiento_con_destino_null_y_disminuye_saldo(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente, saldo=Decimal("50.00"))
+
+    response = client.post(
+        "/api/v1/movimientos/retiro",
+        headers=auth_headers(cliente),
+        json={"wallet_origen_id": str(wallet.id), "monto": "15.00"},
+    )
+
+    assert response.status_code == 201, response.text
+    data = api_data(response)
+    assert data["wallet_origen_id"] == str(wallet.id)
+    assert data["wallet_destino_id"] is None
+    assert _saldo_db(db_session, wallet.id) == Decimal("35.00")
+
+
+def test_cashback_crea_movimiento_con_origen_null_y_aumenta_saldo(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    response = client.post(
+        "/api/v1/movimientos/cashback",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "8.00"},
+    )
+
+    assert response.status_code == 201, response.text
+    data = api_data(response)
+    assert data["wallet_origen_id"] is None
+    assert data["wallet_destino_id"] == str(wallet.id)
+    assert _saldo_db(db_session, wallet.id) == Decimal("8.00")
+
+
+def test_ajuste_admin_credito_y_debito_usan_una_sola_wallet(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente, saldo=Decimal("20.00"))
+
+    credito = client.post(
+        "/api/v1/movimientos/ajuste-admin",
+        headers=auth_headers(admin),
+        json={
+            "wallet_id": str(wallet.id),
+            "monto": "12.00",
+            "operacion": "credito",
+            "motivo": "control operativo",
+        },
+    )
+    debito = client.post(
+        "/api/v1/movimientos/ajuste-admin",
+        headers=auth_headers(admin),
+        json={
+            "wallet_id": str(wallet.id),
+            "monto": "7.00",
+            "operacion": "debito",
+            "motivo": "control operativo",
+        },
+    )
+
+    assert credito.status_code == 201, credito.text
+    assert debito.status_code == 201, debito.text
+    credito_data = api_data(credito)
+    debito_data = api_data(debito)
+    assert credito_data["wallet_origen_id"] is None
+    assert credito_data["wallet_destino_id"] == str(wallet.id)
+    assert debito_data["wallet_origen_id"] == str(wallet.id)
+    assert debito_data["wallet_destino_id"] is None
+    assert _saldo_db(db_session, wallet.id) == Decimal("25.00")
+
+
+def test_transferencia_y_pago_mueven_saldo_entre_dos_wallets(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    emisor = create_user(db_session, org)
+    receptor = create_user(db_session, org)
+    origen = create_wallet(db_session, emisor, saldo=Decimal("100.00"))
+    destino = create_wallet(db_session, receptor)
+
+    transferencia = client.post(
+        "/api/v1/movimientos/transferencia",
+        headers=auth_headers(emisor),
+        json={"wallet_origen_id": str(origen.id), "wallet_destino_id": str(destino.id), "monto": "30.00"},
+    )
+    pago = client.post(
+        "/api/v1/movimientos/pago",
+        headers=auth_headers(emisor),
+        json={"wallet_origen_id": str(origen.id), "wallet_destino_id": str(destino.id), "monto": "10.00"},
+    )
+
+    assert transferencia.status_code == 201, transferencia.text
+    assert pago.status_code == 201, pago.text
+    for response in (transferencia, pago):
+        data = api_data(response)
+        assert data["wallet_origen_id"] == str(origen.id)
+        assert data["wallet_destino_id"] == str(destino.id)
+    assert _saldo_db(db_session, origen.id) == Decimal("60.00")
+    assert _saldo_db(db_session, destino.id) == Decimal("40.00")
 
 
 def test_deposito_admin_transferencia_retiro_y_reversa(
@@ -36,6 +190,8 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
         json={"wallet_destino_id": str(origen.id), "monto": "100.00"},
     )
     assert deposito.status_code == 201, deposito.text
+    assert api_data(deposito)["wallet_origen_id"] is None
+    assert api_data(deposito)["wallet_destino_id"] == str(origen.id)
     assert _balance(client, emisor_headers, origen.id) == Decimal("100.00")
 
     transferencia = client.post(
@@ -44,7 +200,10 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
         json={"wallet_origen_id": str(origen.id), "wallet_destino_id": str(destino.id), "monto": "30.00"},
     )
     assert transferencia.status_code == 201, transferencia.text
-    movimiento_id = api_data(transferencia)["id"]
+    transferencia_data = api_data(transferencia)
+    movimiento_id = transferencia_data["id"]
+    assert transferencia_data["wallet_origen_id"] == str(origen.id)
+    assert transferencia_data["wallet_destino_id"] == str(destino.id)
     assert _balance(client, emisor_headers, origen.id) == Decimal("70.00")
 
     retiro = client.post(
@@ -53,6 +212,8 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
         json={"wallet_origen_id": str(origen.id), "monto": "20.00"},
     )
     assert retiro.status_code == 201, retiro.text
+    assert api_data(retiro)["wallet_origen_id"] == str(origen.id)
+    assert api_data(retiro)["wallet_destino_id"] is None
     assert _balance(client, emisor_headers, origen.id) == Decimal("50.00")
 
     reversa = client.post(
@@ -61,8 +222,223 @@ def test_deposito_admin_transferencia_retiro_y_reversa(
         json={"motivo_reversa": "error operativo"},
     )
     assert reversa.status_code == 201, reversa.text
-    assert api_data(reversa)["tipo"] == "reversa"
+    reversa_data = api_data(reversa)
+    assert reversa_data["tipo"] == "reversa"
+    assert reversa_data["wallet_origen_id"] == str(destino.id)
+    assert reversa_data["wallet_destino_id"] == str(origen.id)
     assert _balance(client, emisor_headers, origen.id) == Decimal("80.00")
+
+
+def test_reversa_de_deposito_debita_wallet_destino_original(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    deposito = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "25.00"},
+    )
+    movimiento_id = api_data(deposito)["id"]
+    reversa = client.post(
+        f"/api/v1/movimientos/{movimiento_id}/reversa",
+        headers=auth_headers(admin),
+        json={"motivo_reversa": "error operativo"},
+    )
+
+    assert reversa.status_code == 201, reversa.text
+    data = api_data(reversa)
+    assert data["wallet_origen_id"] == str(wallet.id)
+    assert data["wallet_destino_id"] is None
+    assert data["movimiento_origen_id"] == movimiento_id
+    assert data["motivo_reversa"] == "error operativo"
+    assert _saldo_db(db_session, wallet.id) == Decimal("0.00")
+    original = db_session.get(Movimiento, UUID(movimiento_id))
+    assert original is not None
+    assert original.estado == EstadoMovimiento.revertida
+
+
+def test_reversa_de_retiro_acredita_wallet_origen_original(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente, saldo=Decimal("40.00"))
+
+    retiro = client.post(
+        "/api/v1/movimientos/retiro",
+        headers=auth_headers(cliente),
+        json={"wallet_origen_id": str(wallet.id), "monto": "10.00"},
+    )
+    movimiento_id = api_data(retiro)["id"]
+    reversa = client.post(
+        f"/api/v1/movimientos/{movimiento_id}/reversa",
+        headers=auth_headers(admin),
+        json={"motivo_reversa": "error operativo"},
+    )
+
+    assert reversa.status_code == 201, reversa.text
+    data = api_data(reversa)
+    assert data["wallet_origen_id"] is None
+    assert data["wallet_destino_id"] == str(wallet.id)
+    assert _saldo_db(db_session, wallet.id) == Decimal("40.00")
+
+
+def test_reversa_de_transferencia_invierte_origen_y_destino(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    emisor = create_user(db_session, org)
+    receptor = create_user(db_session, org)
+    origen = create_wallet(db_session, emisor, saldo=Decimal("60.00"))
+    destino = create_wallet(db_session, receptor)
+
+    transferencia = client.post(
+        "/api/v1/movimientos/transferencia",
+        headers=auth_headers(emisor),
+        json={"wallet_origen_id": str(origen.id), "wallet_destino_id": str(destino.id), "monto": "20.00"},
+    )
+    movimiento_id = api_data(transferencia)["id"]
+    reversa = client.post(
+        f"/api/v1/movimientos/{movimiento_id}/reversa",
+        headers=auth_headers(admin),
+        json={"motivo_reversa": "error operativo"},
+    )
+
+    assert reversa.status_code == 201, reversa.text
+    data = api_data(reversa)
+    assert data["wallet_origen_id"] == str(destino.id)
+    assert data["wallet_destino_id"] == str(origen.id)
+    assert _saldo_db(db_session, origen.id) == Decimal("60.00")
+    assert _saldo_db(db_session, destino.id) == Decimal("0.00")
+
+
+def test_reversa_falla_si_debe_debitar_y_no_hay_saldo(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    receptor = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+    destino = create_wallet(db_session, receptor)
+
+    deposito = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "30.00"},
+    )
+    movimiento_id = api_data(deposito)["id"]
+    transferencia = client.post(
+        "/api/v1/movimientos/transferencia",
+        headers=auth_headers(cliente),
+        json={"wallet_origen_id": str(wallet.id), "wallet_destino_id": str(destino.id), "monto": "30.00"},
+    )
+    assert transferencia.status_code == 201, transferencia.text
+
+    reversa = client.post(
+        f"/api/v1/movimientos/{movimiento_id}/reversa",
+        headers=auth_headers(admin),
+        json={"motivo_reversa": "sin saldo para reversa"},
+    )
+
+    assert reversa.status_code == 400
+    assert reversa.json()["detail"] == "Saldo insuficiente."
+
+
+def test_no_permite_doble_reversa(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    deposito = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "10.00"},
+    )
+    movimiento_id = api_data(deposito)["id"]
+    primera = client.post(
+        f"/api/v1/movimientos/{movimiento_id}/reversa",
+        headers=auth_headers(admin),
+        json={"motivo_reversa": "error operativo"},
+    )
+    segunda = client.post(
+        f"/api/v1/movimientos/{movimiento_id}/reversa",
+        headers=auth_headers(admin),
+        json={"motivo_reversa": "segundo intento"},
+    )
+
+    assert primera.status_code == 201, primera.text
+    assert segunda.status_code == 400
+    assert segunda.json()["detail"] == "El movimiento ya fue revertido."
+
+
+def test_consistencia_bloquea_payloads_invalidos_y_misma_wallet(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente, saldo=Decimal("10.00"))
+    headers = auth_headers(admin)
+
+    deposito_sin_destino = client.post("/api/v1/movimientos/deposito", headers=headers, json={"monto": "1.00"})
+    retiro_sin_origen = client.post("/api/v1/movimientos/retiro", headers=headers, json={"monto": "1.00"})
+    transferencia_sin_destino = client.post(
+        "/api/v1/movimientos/transferencia",
+        headers=headers,
+        json={"wallet_origen_id": str(wallet.id), "monto": "1.00"},
+    )
+    misma_wallet = client.post(
+        "/api/v1/movimientos/transferencia",
+        headers=headers,
+        json={"wallet_origen_id": str(wallet.id), "wallet_destino_id": str(wallet.id), "monto": "1.00"},
+    )
+
+    assert deposito_sin_destino.status_code == 422
+    assert retiro_sin_origen.status_code == 422
+    assert transferencia_sin_destino.status_code == 422
+    assert misma_wallet.status_code == 400
+    assert misma_wallet.json()["detail"] == "No se puede operar sobre la misma wallet."
+
+
+def test_auditoria_de_movimiento_registra_wallets_existentes_monto_y_moneda(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    org = create_org(db_session)
+    admin = create_user(db_session, org, RolUsuario.admin)
+    cliente = create_user(db_session, org)
+    wallet = create_wallet(db_session, cliente)
+
+    response = client.post(
+        "/api/v1/movimientos/deposito",
+        headers=auth_headers(admin),
+        json={"wallet_destino_id": str(wallet.id), "monto": "11.00"},
+    )
+
+    assert response.status_code == 201, response.text
+    audit_log = db_session.scalar(select(AuditLog).where(AuditLog.evento == "movimiento_registrado"))
+    assert audit_log is not None
+    assert audit_log.metadata_log["tipo_operacion"] == "deposito"
+    assert audit_log.metadata_log["monto"] == "11.00"
+    assert audit_log.metadata_log["moneda"] == "ARS"
+    assert "wallet_origen_id" not in audit_log.metadata_log
+    assert audit_log.metadata_log["wallet_destino_id"] == str(wallet.id)
 
 
 def test_bloquea_movimientos_cross_organization(client: TestClient, db_session: Session) -> None:
@@ -136,7 +512,7 @@ def test_soporte_no_puede_crear_ajuste_admin(client: TestClient, db_session: Ses
         "/api/v1/movimientos/ajuste-admin",
         headers=auth_headers(soporte),
         json={
-            "wallet_destino_id": str(wallet.id),
+            "wallet_id": str(wallet.id),
             "monto": "7.00",
             "operacion": "credito",
             "motivo": "control operativo",
@@ -188,7 +564,10 @@ def test_cliente_puede_pagar_a_wallet_de_organizacion(client: TestClient, db_ses
     )
 
     assert response.status_code == 201, response.text
-    assert api_data(response)["tipo"] == "pago"
+    data = api_data(response)
+    assert data["tipo"] == "pago"
+    assert data["wallet_origen_id"] == str(origen.id)
+    assert data["wallet_destino_id"] == str(destino.id)
     db_session.expire_all()
     assert db_session.get(type(origen), origen.id).saldo == Decimal("75.00")
     assert db_session.get(type(destino), destino.id).saldo == Decimal("25.00")
@@ -210,6 +589,9 @@ def test_cliente_puede_pagar_a_wallet_de_organizacion(client: TestClient, db_ses
     assert payer_notification is not None
     assert owner_notification is not None
     assert audit_log is not None
+    assert audit_log.metadata_log["wallet_origen_id"] == str(origen.id)
+    assert audit_log.metadata_log["wallet_destino_id"] == str(destino.id)
+    assert audit_log.metadata_log["moneda"] == "ARS"
 
 
 def test_pago_organizacion_falla_si_no_hay_saldo(client: TestClient, db_session: Session) -> None:

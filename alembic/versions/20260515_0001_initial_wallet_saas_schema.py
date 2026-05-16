@@ -199,10 +199,11 @@ def upgrade() -> None:
     op.create_table(
         "movimientos",
         _uuid_id_column(),
-        sa.Column("wallet_origen_id", uuid_pk, nullable=False),
-        sa.Column("wallet_destino_id", uuid_pk, nullable=False),
+        sa.Column("wallet_origen_id", uuid_pk, nullable=True),
+        sa.Column("wallet_destino_id", uuid_pk, nullable=True),
         sa.Column("organizacion_id", uuid_pk, nullable=False),
         sa.Column("monto", sa.Numeric(18, 2), nullable=False),
+        sa.Column("moneda", moneda_wallet, nullable=False),
         sa.Column("tipo", tipo_movimiento, nullable=False),
         sa.Column("estado", estado_movimiento, nullable=False),
         sa.Column("descripcion", sa.String(length=255), nullable=True),

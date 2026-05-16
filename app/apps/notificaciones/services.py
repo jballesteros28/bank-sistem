@@ -567,27 +567,47 @@ def notificar_wallet_congelada(
 
 
 def _usuarios_para_movimiento(movimiento: MovimientoResponse, db: Session) -> list[Usuario]:
-    origen = db.get(Wallet, movimiento.wallet_origen_id)
-    destino = db.get(Wallet, movimiento.wallet_destino_id)
+    origen = db.get(Wallet, movimiento.wallet_origen_id) if movimiento.wallet_origen_id is not None else None
+    destino = db.get(Wallet, movimiento.wallet_destino_id) if movimiento.wallet_destino_id is not None else None
     usuarios: list[Usuario] = []
-    if movimiento.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback, TipoMovimiento.ajuste_admin}:
-        if destino is not None and destino.usuario_id is not None:
-            usuario = db.get(Usuario, destino.usuario_id)
-            if usuario is not None:
-                usuarios.append(usuario)
+
+    def add_wallet_owner(wallet: Wallet | None) -> None:
+        if wallet is None or wallet.usuario_id is None:
+            return
+        usuario = db.get(Usuario, wallet.usuario_id)
+        if usuario is not None and all(existing.id != usuario.id for existing in usuarios):
+            usuarios.append(usuario)
+
+    if movimiento.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback}:
+        add_wallet_owner(destino)
     elif movimiento.tipo == TipoMovimiento.retiro:
-        if origen is not None and origen.usuario_id is not None:
-            usuario = db.get(Usuario, origen.usuario_id)
-            if usuario is not None:
-                usuarios.append(usuario)
+        add_wallet_owner(origen)
+    elif movimiento.tipo == TipoMovimiento.ajuste_admin:
+        operation = (movimiento.metadata_movimiento or {}).get("operacion")
+        add_wallet_owner(origen if operation == "debito" else destino)
     else:
         for wallet in (origen, destino):
-            if wallet is None or wallet.usuario_id is None:
-                continue
-            usuario = db.get(Usuario, wallet.usuario_id)
-            if usuario is not None and all(existing.id != usuario.id for existing in usuarios):
-                usuarios.append(usuario)
+            add_wallet_owner(wallet)
     return usuarios
+
+
+def _texto_movimiento(movimiento: MovimientoResponse) -> tuple[str, str]:
+    operation = (movimiento.metadata_movimiento or {}).get("operacion")
+    if movimiento.tipo == TipoMovimiento.deposito:
+        return "Deposito acreditado", "Se acreditó saldo en tu wallet."
+    if movimiento.tipo == TipoMovimiento.retiro:
+        return "Retiro debitado", "Se debitó saldo de tu wallet."
+    if movimiento.tipo == TipoMovimiento.cashback:
+        return "Cashback recibido", "Recibiste cashback."
+    if movimiento.tipo == TipoMovimiento.ajuste_admin and operation == "debito":
+        return "Ajuste administrativo", "Se debitó saldo de tu wallet por un ajuste administrativo."
+    if movimiento.tipo == TipoMovimiento.ajuste_admin:
+        return "Ajuste administrativo", "Se acreditó saldo en tu wallet por un ajuste administrativo."
+    if movimiento.tipo == TipoMovimiento.reversa:
+        return "Reversa registrada", "Se registró una reversa de movimiento."
+    if movimiento.tipo == TipoMovimiento.transferencia:
+        return "Transferencia registrada", "Se registró una transferencia."
+    return "Pago registrado", "Se registró un pago."
 
 
 def notificar_movimiento(
@@ -602,15 +622,17 @@ def notificar_movimiento(
         if organizacion is None:
             return
         tipo = MOVIMIENTO_TIPO_NOTIFICACION[movimiento.tipo]
-        titulo = f"Movimiento {movimiento.tipo.value}"
-        mensaje = f"Se registro un movimiento por {movimiento.monto}."
+        titulo, mensaje = _texto_movimiento(movimiento)
         metadata = {
             "movimiento_id": movimiento.id,
             "tipo": movimiento.tipo.value,
             "monto": str(movimiento.monto),
-            "wallet_origen_id": movimiento.wallet_origen_id,
-            "wallet_destino_id": movimiento.wallet_destino_id,
+            "moneda": movimiento.moneda.value,
         }
+        if movimiento.wallet_origen_id is not None:
+            metadata["wallet_origen_id"] = movimiento.wallet_origen_id
+        if movimiento.wallet_destino_id is not None:
+            metadata["wallet_destino_id"] = movimiento.wallet_destino_id
         for usuario in _usuarios_para_movimiento(movimiento, db):
             crear_notificacion_y_email(
                 organizacion=organizacion,
@@ -637,8 +659,8 @@ def notificar_pago_organizacion(
 ) -> None:
     def _run() -> None:
         organizacion = db.get(Organizacion, movimiento.organizacion_id)
-        origen = db.get(Wallet, movimiento.wallet_origen_id)
-        destino = db.get(Wallet, movimiento.wallet_destino_id)
+        origen = db.get(Wallet, movimiento.wallet_origen_id) if movimiento.wallet_origen_id is not None else None
+        destino = db.get(Wallet, movimiento.wallet_destino_id) if movimiento.wallet_destino_id is not None else None
         if organizacion is None or origen is None or destino is None:
             return
 
@@ -646,6 +668,7 @@ def notificar_pago_organizacion(
             "movimiento_id": movimiento.id,
             "tipo": movimiento.tipo.value,
             "monto": str(movimiento.monto),
+            "moneda": movimiento.moneda.value,
             "wallet_origen_id": movimiento.wallet_origen_id,
             "wallet_destino_id": movimiento.wallet_destino_id,
         }

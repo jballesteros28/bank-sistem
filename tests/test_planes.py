@@ -9,7 +9,7 @@ from app.apps.movimientos.models import Movimiento
 from app.apps.organizaciones.models import Organizacion
 from app.apps.planes.models import Plan
 from app.apps.planes.services import asegurar_planes_base, obtener_plan_por_codigo
-from app.shared.enums import EstadoMovimiento, RolUsuario, TipoMovimiento
+from app.shared.enums import EstadoMovimiento, MonedaWallet, RolUsuario, TipoMovimiento
 from tests.conftest import api_data, auth_headers, create_org, create_user, create_wallet
 
 
@@ -139,10 +139,11 @@ def test_free_bloquea_movimientos_al_superar_limite_mensual(client: TestClient, 
     db_session.add(free)
     db_session.add(
         Movimiento(
-            wallet_origen_id=wallet.id,
+            wallet_origen_id=None,
             wallet_destino_id=wallet.id,
             organizacion_id=org.id,
             monto=Decimal("1.00"),
+            moneda=MonedaWallet.ARS,
             tipo=TipoMovimiento.deposito,
             estado=EstadoMovimiento.aprobada,
             es_reversa=False,

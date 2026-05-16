@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.shared.enums import EstadoMovimiento, TipoMovimiento
+from app.shared.enums import EstadoMovimiento, MonedaWallet, TipoMovimiento
 from app.shared.utils import normalize_decimal
 
 
@@ -56,7 +56,7 @@ class MovimientoCashbackCreate(MovimientoBaseCreate):
 
 
 class MovimientoAjusteAdminCreate(MovimientoBaseCreate):
-    wallet_destino_id: UUID
+    wallet_id: UUID
     operacion: Literal["credito", "debito"]
     motivo: str = Field(..., min_length=3, max_length=255)
 
@@ -71,9 +71,10 @@ class MovimientoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    wallet_origen_id: UUID
-    wallet_destino_id: UUID
+    wallet_origen_id: UUID | None = None
+    wallet_destino_id: UUID | None = None
     monto: Decimal
+    moneda: MonedaWallet
     tipo: TipoMovimiento
     estado: EstadoMovimiento
     descripcion: str | None = None
