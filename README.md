@@ -542,3 +542,42 @@ Roles en UI:
 - `cliente`: no puede listar ni crear wallets de organizacion; la seccion aparece bloqueada y conserva la lista de wallets de usuario.
 
 La pantalla muestra loading, error y empty states por seccion; cards con alias, tipo, `owner_type`, moneda, saldo, estado, limite por operacion, marca principal y fecha de creacion; y al crear invalida queries de `wallets` y `dashboard`.
+
+### Movimientos UI
+
+La ruta privada `/movimientos` muestra datos reales y permite operar sobre wallets segun el rol autenticado. La pantalla usa TanStack Query para movimientos y wallets, filtros client-side, React Hook Form + Zod para formularios y modales separados para creacion, detalle y reversa.
+
+Endpoints consumidos:
+
+- `GET /api/v1/movimientos?skip=0&limit=100`: lista movimientos visibles.
+- `GET /api/v1/movimientos/{movimiento_id}`: disponible en API frontend para detalle puntual.
+- `POST /api/v1/movimientos/deposito`
+- `POST /api/v1/movimientos/retiro`
+- `POST /api/v1/movimientos/transferencia`
+- `POST /api/v1/movimientos/pago`
+- `POST /api/v1/movimientos/pago-organizacion`
+- `POST /api/v1/movimientos/cashback`
+- `POST /api/v1/movimientos/ajuste-admin`
+- `POST /api/v1/movimientos/{movimiento_id}/reversa`
+- `GET /api/v1/wallets`
+- `GET /api/v1/wallets/organizacion`
+
+Operaciones soportadas desde UI:
+
+- `owner`, `admin` y `super_admin`: deposito, retiro, transferencia, pago a organizacion, cashback, ajuste admin y reversa de movimientos aprobados.
+- `soporte`: consulta movimientos, sin acciones de creacion ni reversa.
+- `cliente`: ve sus movimientos y puede iniciar pago a organizacion; con el contrato actual no puede listar wallets de organizacion, por lo que el formulario permite ingresar el ID destino si no hay wallets seleccionables.
+
+Campos principales:
+
+- Deposito y cashback acreditan `wallet_destino_id`.
+- Retiro debita `wallet_origen_id`.
+- Transferencia y pago a organizacion usan `wallet_origen_id`, `wallet_destino_id`, `monto`, `descripcion` y `referencia_externa`.
+- Ajuste admin envia `wallet_id`, `operacion`, `monto`, `descripcion` y mapea la descripcion a `motivo`, requerido por backend.
+- Reversa solicita `motivo_reversa` y crea un movimiento contable nuevo.
+
+Limitaciones actuales:
+
+- Los filtros de tipo, estado y busqueda por descripcion/referencia se aplican en frontend porque el backend todavia no expone esos query params.
+- El listado carga hasta 100 movimientos recientes.
+- La tabla muestra alias de wallets cuando la sesion tiene permiso para listarlas; si no, muestra el prefijo del ID.

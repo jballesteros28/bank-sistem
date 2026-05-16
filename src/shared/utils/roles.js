@@ -31,3 +31,19 @@ export function canManageOrganizationWallets(user) {
 export function canViewOrganizationWallets(user) {
   return canManageOrganizationWallets(user) || isSupport(user);
 }
+
+export function canCreateFinancialMovement(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
+export function canCreateClientPayment(user) {
+  return isClient(user);
+}
+
+export function canReverseMovement(user) {
+  return canCreateFinancialMovement(user);
+}
+
+export function canViewMovements(user) {
+  return Boolean(getRole(user));
+}

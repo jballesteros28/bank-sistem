@@ -16,12 +16,15 @@ export const endpoints = {
   },
   movimientos: {
     list: "/movimientos",
+    detail: (movimientoId) => `/movimientos/${movimientoId}`,
     deposito: "/movimientos/deposito",
     transferencia: "/movimientos/transferencia",
     retiro: "/movimientos/retiro",
     pago: "/movimientos/pago",
     pagoOrganizacion: "/movimientos/pago-organizacion",
     cashback: "/movimientos/cashback",
+    ajusteAdmin: "/movimientos/ajuste-admin",
+    reversa: (movimientoId) => `/movimientos/${movimientoId}/reversa`,
   },
   notificaciones: {
     list: "/notificaciones",
