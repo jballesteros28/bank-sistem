@@ -3,6 +3,10 @@ export const endpoints = {
     login: "/auth/login",
     me: "/auth/me",
   },
+  usuarios: {
+    list: "/usuarios",
+    detail: (usuarioId) => `/usuarios/${usuarioId}`,
+  },
   onboarding: {
     registroOrganizacion: "/onboarding/registro-organizacion",
   },

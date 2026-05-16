@@ -21,4 +21,5 @@ export const ROUTES = {
   branding: "/branding",
   planes: "/planes",
   integraciones: "/integraciones",
+  usuarios: "/usuarios",
 };

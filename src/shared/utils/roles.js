@@ -4,6 +4,17 @@ function getRole(user) {
   return user?.rol || user?.role || "";
 }
 
+function isSameUser(user, targetUser) {
+  return Boolean(user?.id && targetUser?.id && user.id === targetUser.id);
+}
+
+function isSameOrganization(user, targetUser) {
+  if (!user?.organizacion_id || !targetUser?.organizacion_id) {
+    return true;
+  }
+  return user.organizacion_id === targetUser.organizacion_id;
+}
+
 export function isOwner(user) {
   return getRole(user) === ROLES.owner;
 }
@@ -78,4 +89,41 @@ export function canManageWebhooks(user, planAllowsWebhooks = true) {
 
 export function canViewWebhookDeliveries(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
+}
+
+export function canViewUsers(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
+export function canCreateUsers(user) {
+  if (isSuperAdmin(user)) {
+    return Boolean(user?.organizacion_id);
+  }
+  return (isOwner(user) || isAdmin(user)) && Boolean(user?.organizacion_id);
+}
+
+export function canChangeUserRole(user, targetUser) {
+  if (!canViewUsers(user) || !targetUser || isSameUser(user, targetUser) || !isSameOrganization(user, targetUser)) {
+    return false;
+  }
+  if (isSuperAdmin(targetUser)) {
+    return false;
+  }
+  if (isSuperAdmin(user) || isOwner(user)) {
+    return true;
+  }
+  return isAdmin(user) && !isOwner(targetUser);
+}
+
+export function canChangeUserStatus(user, targetUser) {
+  if (!canViewUsers(user) || !targetUser || isSameUser(user, targetUser) || !isSameOrganization(user, targetUser)) {
+    return false;
+  }
+  if (isSuperAdmin(targetUser)) {
+    return false;
+  }
+  if (isSuperAdmin(user) || isOwner(user)) {
+    return true;
+  }
+  return isAdmin(user) && !isOwner(targetUser);
 }

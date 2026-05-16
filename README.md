@@ -107,6 +107,9 @@ Validacion frontend completada en FASE 14.1.1:
 - `GET /api/v1/auth/me`
 - `GET /api/v1/organizaciones`
 - `GET /api/v1/usuarios`
+- `POST /api/v1/usuarios`
+- `GET /api/v1/usuarios/{usuario_id}`
+- `PATCH /api/v1/usuarios/{usuario_id}`
 - `GET /api/v1/wallets`
 - `POST /api/v1/wallets/organizacion`
 - `GET /api/v1/wallets/organizacion`
@@ -675,6 +678,35 @@ Limitaciones actuales:
 - No se implementa cambio de plan desde frontend. El backend tiene endpoint administrativo de cambio, pero queda fuera de esta fase.
 - La moneda del precio comercial se muestra en USD segun los planes base actuales.
 
+### Usuarios UI
+
+La ruta privada `/usuarios` permite administrar usuarios de la organizacion con TanStack Query, filtros client-side y modales con React Hook Form + Zod. La ruta esta lazy-loaded y el sidebar solo muestra la entrada cuando el rol puede consultar el endpoint real.
+
+Endpoints consumidos:
+
+- `GET /api/v1/usuarios`: lista usuarios visibles segun el alcance del usuario autenticado.
+- `POST /api/v1/usuarios`: crea usuarios dentro de la organizacion actual.
+- `PATCH /api/v1/usuarios/{usuario_id}` con `{ "rol": "admin" }`: cambia rol usando el endpoint general existente.
+- `PATCH /api/v1/usuarios/{usuario_id}` con `{ "es_activo": true }`: activa o inactiva usuarios usando el endpoint general existente.
+- `GET /api/v1/auth/me`: mantiene el usuario actual para permisos visuales.
+
+Roles en UI:
+
+- `owner`: puede ver, crear usuarios y cambiar rol/estado de usuarios de su organizacion, excepto a si mismo y usuarios `super_admin`.
+- `admin`: puede ver, crear y gestionar usuarios, pero no modifica usuarios `owner`, `super_admin` ni a si mismo.
+- `super_admin`: puede ver y gestionar usuarios visibles por backend, pero la UI de organizacion no permite crear ni asignar `super_admin`.
+- `soporte`: no ve la entrada en sidebar porque el backend actual restringe `GET /api/v1/usuarios` a roles administrativos.
+- `cliente`: no accede utilmente a la pantalla.
+
+Reglas y limitaciones actuales:
+
+- La creacion desde UI solo permite roles `admin`, `soporte` y `cliente`.
+- El cambio de rol solo permite `owner`, `admin`, `soporte` y `cliente`; `super_admin` no se asigna desde el panel de organizacion.
+- El backend no tiene sub-endpoints `/rol` o `/estado`; ambos cambios usan `PATCH /api/v1/usuarios/{usuario_id}`.
+- El backend actual no expone un enum `estado` de usuario. La UI mapea `es_activo=true` a `activo` y `es_activo=false` a `inactivo`; `suspendido` solo se muestra si aparece un `bloqueado_hasta` futuro, pero no se puede setear desde esta pantalla.
+- `UsuarioResponse` no expone fecha de creacion; la tabla muestra la columna solo si el backend incorpora un campo compatible en el futuro.
+- Un `super_admin` sin organizacion en sesion puede listar o modificar segun backend, pero no ve el boton de creacion porque el formulario no incluye selector de organizacion.
+
 ### Integraciones UI
 
 La ruta privada `/integraciones` deja de ser placeholder y permite gestionar API Keys, Webhooks y deliveries desde tabs independientes. La pantalla usa TanStack Query por panel, React Hook Form + Zod para formularios y respeta el plan actual consultando `GET /api/v1/planes/organizacion/actual`.
@@ -780,7 +812,7 @@ Configuracion y limpieza:
 
 Frontend:
 
-- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes e integraciones.
+- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes, integraciones y usuarios.
 - El build quedo dividido por pagina; el chunk inicial bajo a ~496 kB y desaparecio el warning de Vite por chunk mayor a 500 kB.
 - Las dependencias frontend actuales estan en uso: React, React DOM, React Router, Axios, TanStack Query, Zustand, React Hook Form, Zod, resolvers, Tailwind, ESLint y Vite.
 - Se reviso seguridad local: el store de auth persiste solo token/user; API Keys y webhook secrets viven solo en formularios/modales y no se guardan en storage global.

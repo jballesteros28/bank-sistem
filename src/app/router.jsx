@@ -30,6 +30,9 @@ const PlanesPage = lazy(() =>
 const IntegracionesPage = lazy(() =>
   import("../features/integraciones/pages/IntegracionesPage").then((module) => ({ default: module.IntegracionesPage })),
 );
+const UsuariosPage = lazy(() =>
+  import("../features/usuarios/pages/UsuariosPage").then((module) => ({ default: module.UsuariosPage })),
+);
 
 function RootRedirect() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -76,6 +79,7 @@ export const router = createBrowserRouter([
       { path: "/branding", element: lazyRoute(BrandingPage) },
       { path: "/planes", element: lazyRoute(PlanesPage) },
       { path: "/integraciones", element: lazyRoute(IntegracionesPage) },
+      { path: "/usuarios", element: lazyRoute(UsuariosPage) },
     ],
   },
   {
