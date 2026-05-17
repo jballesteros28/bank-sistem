@@ -25,7 +25,7 @@ export function EcommerceCurlExample({ canManage = false }) {
     <Card>
       <CardHeader
         title="Ejemplo de integracion curl"
-        description="Simula una compra pagada informada por una tienda externa contra el endpoint publico."
+        description="Simula una compra pagada contra el backend local de sandbox; en produccion reemplaza host y API Key."
         action={
           canManage ? (
             <Link

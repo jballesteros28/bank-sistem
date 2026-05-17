@@ -102,11 +102,12 @@ Accesos demo:
 - Soporte: `soporte@demo.com` / `Password123!`
 - Cliente: `cliente@demo.com` / `Password123!`
 
-El seed deja lista la organizacion `Demo Wallet`, usuarios para todos los roles, wallet empresa con saldo, wallets de owner/admin/cliente, movimientos demo, regla y aplicacion de recompensa demo, notificaciones demo, una API Key demo ecommerce activa y un webhook demo inactivo. Es idempotente para desarrollo: reutiliza los registros demo existentes, restablece saldos/credenciales y no duplica datos base.
+El seed deja lista la organizacion `Demo Wallet` en plan `Starter`, usuarios para todos los roles, wallet empresa con saldo, wallets de owner/admin/cliente, movimientos demo, regla y aplicacion de recompensa demo, notificaciones demo, una API Key demo ecommerce activa y un webhook demo inactivo. Es idempotente para desarrollo: reutiliza los registros demo existentes, restablece saldos/credenciales y no duplica datos base.
 
 Datos demo principales:
 
 - Organizacion: `Demo Wallet` (`demo-wallet`)
+- Plan demo: `Starter`, para permitir auto-creacion de clientes y wallets durante pruebas ecommerce.
 - Wallet empresa: `Wallet Empresa Demo`, saldo `50000 ARS`
 - Wallet cliente: `Wallet Cliente Demo`, saldo `10000 ARS`
 - Wallet owner: `Wallet Owner Demo`, saldo `5000 ARS`
@@ -132,6 +133,7 @@ Que probar manualmente:
 - Pago a organizacion.
 - Mis recompensas en `/recompensas`.
 - Confirmar que cliente no ve Developer en el sidebar.
+- Confirmar que cliente no ve Ecommerce en el sidebar.
 
 ## Comandos
 
@@ -151,6 +153,35 @@ npm run lint
 npm run build
 npm run preview
 ```
+
+## Preparacion para produccion
+
+La guia completa esta en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Esta fase no hace deploy: solo deja backend y frontend listos para correr fuera del entorno local.
+
+Backend:
+
+- Variables obligatorias: `ENVIRONMENT=production`, `DEBUG=false`, `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, `FRONTEND_URL`, `BACKEND_URL` y `LOG_LEVEL=INFO`.
+- `SECRET_KEY` debe ser largo y aleatorio; `change-me` y valores cortos son rechazados en production.
+- `CORS_ORIGINS` se configura como CSV real, por ejemplo `https://wallet-demo.vercel.app,https://admin.wallet-demo.com`; no usar `*` en production.
+- Antes de correr la app: `python -m alembic upgrade head`.
+- Comando recomendado para primera demo: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- Health checks disponibles: `GET /health` y `GET /ready`.
+- `EMAILS_ENABLED=true` solo cuando SMTP este configurado.
+
+Frontend:
+
+- Variables Vite: `VITE_API_BASE_URL`, `VITE_API_PREFIX=/api/v1` y `VITE_APP_NAME=Wallet SaaS`.
+- En local usar `VITE_API_BASE_URL=http://127.0.0.1:8000`; en produccion usar la URL real del backend.
+- Build: `npm run build`; preview local: `npm run preview`.
+- Los ejemplos curl del Developer Portal usan localhost como sandbox local; para produccion reemplazar host y API Key por datos del entorno real.
+
+Checklist:
+
+- Cambiar `SECRET_KEY`.
+- Configurar PostgreSQL cloud y ejecutar migraciones.
+- Configurar `CORS_ORIGINS` con el dominio frontend real.
+- No ejecutar `scripts/reset_local_db.py` ni `scripts/dev_seed.py` en produccion.
+- No versionar `.env`, `.env.local`, secretos, API Keys ni webhook secrets.
 
 Validacion frontend completada en FASE 14.1.1:
 
@@ -1025,6 +1056,72 @@ curl -X POST http://127.0.0.1:8000/api/v1/ext/ecommerce/order-paid \
 ```
 
 La API Key debe incluir `ecommerce:write`; la consulta visual requiere usuario JWT con permisos de lectura. Si hay regla activa, el flujo crea o reutiliza cliente y wallet, aplica cashback/store credit, genera movimiento, registra auditoria y permite seguir la aplicacion desde `/recompensas`. Los errores de procesamiento quedan visibles en tabla y modal junto con el `raw_payload`.
+
+### Ecommerce E2E
+
+Validacion manual recomendada con backend y frontend activos:
+
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+npm run dev
+python scripts/reset_local_db.py --yes
+```
+
+Confirmar servicios:
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/docs
+```
+
+El reset imprime la API Key real solo cuando la crea en una base limpia:
+
+```text
+API Key real creada por primera vez: wsk_test_xxxxx
+```
+
+Curl Unix/macOS:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/ext/ecommerce/order-paid \
+  -H "X-API-Key: $API_KEY_ECOMMERCE_DEMO" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "proveedor": "generic",
+    "external_order_id": "order-e2e-001",
+    "customer_email": "cliente@demo.com",
+    "customer_name": "Cliente Demo",
+    "amount": 20000,
+    "currency": "ARS",
+    "metadata": { "source": "manual-e2e" }
+  }'
+```
+
+Curl Windows PowerShell:
+
+```powershell
+$apiKey = "wsk_test_xxxxx"
+@'
+{"proveedor":"generic","external_order_id":"order-e2e-001","customer_email":"cliente@demo.com","customer_name":"Cliente Demo","amount":20000,"currency":"ARS","metadata":{"source":"manual-e2e"}}
+'@ | Set-Content .\order-paid.json -Encoding utf8
+curl.exe -X POST "http://127.0.0.1:8000/api/v1/ext/ecommerce/order-paid" -H "X-API-Key: $apiKey" -H "Content-Type: application/json" --data-binary "@order-paid.json"
+```
+
+Resultados esperados:
+
+- Primer envio de `order-e2e-001`: `201`, `event.procesado=true`, `recompensa_aplicada_id` presente y movimiento `cashback`/`credito_tienda` creado.
+- Repetir `order-e2e-001`: `409` con `La orden ya fue procesada.`; no duplica recompensa ni movimiento.
+- Enviar `order-e2e-new-client` con `nuevo-cliente-ecommerce@example.com`: crea usuario `cliente`, wallet principal y recompensa si la regla demo aplica.
+- Enviar una orden con `amount=500`: queda `procesado=true`, sin recompensa y con `error_procesamiento="No hay regla de recompensa aplicable"`.
+
+Donde ver los resultados:
+
+- `/ecommerce`: ordenes recibidas, estado, errores, `recompensa_aplicada_id`, filtros y modal con `raw_payload`.
+- `/recompensas`: aplicacion de recompensa con referencia `ecommerce:{event_id}`.
+- `/movimientos`: movimiento creado como `Recompensa ecommerce: Cashback Demo 10%`.
+- `/notificaciones`: notificacion `Recompensa recibida` para el cliente.
+- `/usuarios`: cliente auto-creado si se uso un email nuevo.
+- Login `cliente@demo.com`: dashboard con saldo actualizado y `/recompensas` con `Mis recompensas`.
 
 ### Developer Portal
 

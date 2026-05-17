@@ -157,9 +157,9 @@ def _ensure_base_plans(db: Session) -> None:
 
 def _ensure_demo_organization(db: Session) -> Organizacion:
     _ensure_base_plans(db)
-    free_plan = obtener_plan_por_codigo("free", db)
-    if free_plan is None:
-        raise RuntimeError("Plan free no disponible despues de asegurar planes base.")
+    starter_plan = obtener_plan_por_codigo("starter", db)
+    if starter_plan is None:
+        raise RuntimeError("Plan starter no disponible despues de asegurar planes base.")
 
     organizacion = db.scalar(select(Organizacion).where(Organizacion.slug == DEMO_ORG["slug"]))
     if organizacion is None:
@@ -171,7 +171,7 @@ def _ensure_demo_organization(db: Session) -> Organizacion:
     organizacion.nombre_comercial = DEMO_ORG["nombre"]
     organizacion.moneda_default = MonedaWallet.ARS.value
     organizacion.timezone = "America/Argentina/Buenos_Aires"
-    organizacion.plan_id = free_plan.id
+    organizacion.plan_id = starter_plan.id
     organizacion.estado = EstadoOrganizacion.activa
     db.flush()
     return organizacion

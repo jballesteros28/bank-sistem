@@ -1,5 +1,10 @@
+import logging
+
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.apps.admin.routes import router as admin_router
 from app.apps.auditoria.routes import router as auditoria_router
@@ -16,16 +21,22 @@ from app.apps.planes.routes import router as planes_router
 from app.apps.recompensas.routes import router as recompensas_router
 from app.apps.usuarios.routes import router as usuarios_router
 from app.apps.wallets.routes import router as wallets_router
+from app.core import database as database_module
 from app.core.api import API_V1_PREFIX
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.middlewares.error_handler import register_exception_handlers
 from app.middlewares.request_logger import RequestLoggerMiddleware
 from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 
+configure_logging()
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title=settings.APP_NAME,
-    version="1.8.0-alpha",
+    version=settings.APP_VERSION,
+    debug=settings.DEBUG,
     description=(
         "API multi-tenant para Wallet SaaS. Incluye configuracion de branding "
         "y preparacion white-label por organizacion."
@@ -63,3 +74,25 @@ app.include_router(notificaciones_router, prefix=API_V1_PREFIX)
 @app.get("/health", tags=["Health"])
 def health() -> dict[str, str]:
     return {"status": "ok", "service": settings.APP_NAME}
+
+
+@app.get("/ready", tags=["Health"], response_model=None)
+def ready() -> dict[str, object] | JSONResponse:
+    try:
+        with database_module.SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        logger.warning("Readiness database check failed", exc_info=settings.DEBUG)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "service": settings.APP_NAME,
+                "checks": {"database": "error"},
+            },
+        )
+    return {
+        "status": "ready",
+        "service": settings.APP_NAME,
+        "checks": {"database": "ok"},
+    }

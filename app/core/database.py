@@ -32,7 +32,7 @@ def get_db() -> Generator[Session, None, None]:
 def assert_test_database_url(database_url: str) -> None:
     url = make_url(database_url)
     database_name = url.database or database_url
-    if database_url.startswith("sqlite") and database_name == ":memory:" and settings.ENVIRONMENT == "test":
+    if database_url.startswith("sqlite") and database_name == ":memory:" and settings.ENVIRONMENT in {"test", "testing"}:
         return
     if "test" not in database_name.lower():
         raise RuntimeError(
