@@ -21,6 +21,15 @@ const examples = [
     ].join("\n"),
   },
   {
+    label: "Compra ecommerce pagada",
+    code: [
+      "curl -X POST http://127.0.0.1:8000/api/v1/ext/ecommerce/order-paid \\",
+      '  -H "X-API-Key: wsk_test_xxxxx" \\',
+      '  -H "Content-Type: application/json" \\',
+      '  -d \'{ "proveedor": "generic", "external_order_id": "order-1001", "customer_email": "cliente@demo.com", "amount": 20000, "currency": "ARS" }\'',
+    ].join("\n"),
+  },
+  {
     label: "Listar movimientos",
     code: ['curl -X GET http://127.0.0.1:8000/api/v1/ext/movimientos \\', '  -H "X-API-Key: wsk_test_xxxxx"'].join(
       "\n",

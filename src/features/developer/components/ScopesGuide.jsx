@@ -6,6 +6,8 @@ const scopes = [
   { scope: "wallets:write", description: "Crear o modificar recursos de wallets permitidos por la API externa." },
   { scope: "movimientos:read", description: "Listar movimientos visibles para la organizacion de la API Key." },
   { scope: "movimientos:write", description: "Crear depositos y cashback desde sistemas externos." },
+  { scope: "ecommerce:read", description: "Consultar eventos ecommerce recibidos." },
+  { scope: "ecommerce:write", description: "Recibir compras pagadas desde una tienda externa." },
   { scope: "usuarios:read", description: "Consultar datos de usuarios cuando exista endpoint externo compatible." },
   { scope: "usuarios:write", description: "Administrar usuarios cuando exista endpoint externo compatible." },
   { scope: "webhooks:read", description: "Consultar configuracion y deliveries de webhooks cuando aplique." },

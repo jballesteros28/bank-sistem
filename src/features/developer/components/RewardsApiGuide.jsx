@@ -17,7 +17,11 @@ export function RewardsApiGuide() {
       />
       <CodeBlock code={rewardsExample} label="Simular recompensa" />
       <p className="mt-4 text-sm leading-6 text-slate-600">
-        La API externa de recompensas con API Key queda reservada para una fase futura. El evento disponible para webhooks es
+        La aplicacion automatica via ecommerce usa API Key y vive en
+        <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-900">
+          /api/v1/ext/ecommerce/order-paid
+        </code>
+        . El evento disponible para webhooks de recompensas es
         <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-900">recompensa.aplicada</code>.
       </p>
     </Card>

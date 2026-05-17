@@ -1,0 +1,1 @@
+"""Ecommerce integration app."""

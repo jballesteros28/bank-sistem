@@ -33,6 +33,7 @@ app/
     notificaciones/
     planes/
     recompensas/
+    ecommerce/
   middlewares/
 alembic/
 tests/
@@ -63,7 +64,7 @@ Si `psycopg2` muestra un mensaje con encoding ilegible, verificar primero que Po
 
 ## IDs publicos
 
-Los IDs publicos principales usan UUID: organizaciones, planes, usuarios, wallets, movimientos, recompensas, auditoria y notificaciones.
+Los IDs publicos principales usan UUID: organizaciones, planes, usuarios, wallets, movimientos, recompensas, ecommerce, auditoria y notificaciones.
 
 ## Entorno local de pruebas
 
@@ -101,7 +102,7 @@ Accesos demo:
 - Soporte: `soporte@demo.com` / `Password123!`
 - Cliente: `cliente@demo.com` / `Password123!`
 
-El seed deja lista la organizacion `Demo Wallet`, usuarios para todos los roles, wallet empresa con saldo, wallets de owner/admin/cliente, movimientos demo, regla y aplicacion de recompensa demo, notificaciones demo, una API Key demo inactiva y un webhook demo inactivo. Es idempotente para desarrollo: reutiliza los registros demo existentes, restablece saldos/credenciales y no duplica datos base.
+El seed deja lista la organizacion `Demo Wallet`, usuarios para todos los roles, wallet empresa con saldo, wallets de owner/admin/cliente, movimientos demo, regla y aplicacion de recompensa demo, notificaciones demo, una API Key demo ecommerce activa y un webhook demo inactivo. Es idempotente para desarrollo: reutiliza los registros demo existentes, restablece saldos/credenciales y no duplica datos base.
 
 Datos demo principales:
 
@@ -112,8 +113,8 @@ Datos demo principales:
 - Wallet admin: `Wallet Admin Demo`, saldo `3000 ARS`
 - Movimientos seed: `seed-deposito-cliente`, `seed-pago-cliente-organizacion`, `seed-cashback-cliente`, `seed-recompensa-demo`, `seed-ajuste-organizacion`
 - Regla recompensa: `Cashback Demo 10%`, compra minima `1000 ARS`, tope `2000 ARS`, recompensa demo esperada `1500 ARS`
-- API Key demo: inactiva por defecto, scopes `wallets:read`, `movimientos:read`, `movimientos:write`
-- Webhook demo: inactivo, URL `https://example.com/webhook-demo`, eventos `movimiento.creado`, `pago_organizacion.creado` y `recompensa.aplicada`
+- API Key demo: activa por defecto, scopes `wallets:read`, `movimientos:read`, `movimientos:write`, `ecommerce:read`, `ecommerce:write`
+- Webhook demo: inactivo, URL `https://example.com/webhook-demo`, eventos `movimiento.creado`, `pago_organizacion.creado`, `ecommerce.order_paid`, `ecommerce.order_processed`, `ecommerce.order_failed` y `recompensa.aplicada`
 
 Que probar manualmente:
 
@@ -202,6 +203,9 @@ Validacion frontend completada en FASE 14.1.1:
 - `GET /api/v1/ext/wallets/{wallet_id}`
 - `POST /api/v1/ext/movimientos/deposito`
 - `POST /api/v1/ext/movimientos/cashback`
+- `POST /api/v1/ext/ecommerce/order-paid`
+- `GET /api/v1/ecommerce/orders`
+- `GET /api/v1/ecommerce/orders/{event_id}`
 
 ## Wallets
 
@@ -305,6 +309,51 @@ Endpoints principales:
 - `GET /api/v1/recompensas/aplicaciones`: lista aplicaciones de la organizacion.
 - `GET /api/v1/recompensas/aplicaciones/me`: lista recompensas del usuario autenticado.
 
+## Ecommerce Integration
+
+Wallet SaaS no procesa dinero real. El pago real ocurre fuera del sistema, por ejemplo en Tienda Nube, Shopify, WooCommerce, Mercado Pago u otra tienda. Cuando la tienda confirma una compra pagada, llama a `POST /api/v1/ext/ecommerce/order-paid` con una API Key de la organizacion y el backend acredita una recompensa interna si hay una regla activa aplicable.
+
+Flujo:
+
+1. El ecommerce envia proveedor, `external_order_id`, email del cliente, monto y moneda.
+2. El backend toma `organizacion_id` desde la API Key, nunca desde el payload publico.
+3. Se deduplica por `organizacion_id + proveedor + external_order_id`.
+4. Si el cliente no existe en esa organizacion, se crea automaticamente con rol `cliente`, password temporal no expuesta y wallet interna.
+5. Si hay regla de recompensa activa, se crea `aplicaciones_recompensa`, movimiento interno, notificacion y auditoria con `actor_tipo=api_key`.
+
+Ejemplo:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/ext/ecommerce/order-paid \
+  -H "X-API-Key: wsk_test_xxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "proveedor": "generic",
+    "external_order_id": "order-1001",
+    "customer_email": "cliente@demo.com",
+    "customer_name": "Cliente Demo",
+    "amount": 20000,
+    "currency": "ARS",
+    "metadata": {
+      "source": "tienda-nube-demo"
+    }
+  }'
+```
+
+Scopes:
+
+- `ecommerce:write` para `POST /api/v1/ext/ecommerce/order-paid`.
+- `ecommerce:read` queda disponible para integraciones que necesiten lectura futura; los endpoints internos de consulta usan JWT.
+
+Eventos webhook salientes:
+
+- `ecommerce.order_paid`
+- `ecommerce.order_processed`
+- `ecommerce.order_failed`
+- `recompensa.aplicada` cuando se acredita recompensa.
+
+Si no hay regla aplicable, el evento queda procesado con `error_procesamiento="No hay regla de recompensa aplicable"` y se dispara `ecommerce.order_failed`. Si la orden se repite, el endpoint devuelve `409` con `La orden ya fue procesada.`. La moneda del payload debe estar soportada por wallets internas (`ARS`, `USD` o `PUNTOS`).
+
 ## Integraciones
 
 Las organizaciones pueden conectar sistemas externos mediante API Keys y Webhooks. Las API Keys pertenecen siempre a una organizacion, no reemplazan el login JWT y no se guardan en texto plano. La key real se muestra solo al crearla; luego el backend conserva `key_prefix` para identificacion y `key_hash` para validacion.
@@ -321,6 +370,8 @@ Scopes iniciales:
 - `wallets:write`
 - `movimientos:read`
 - `movimientos:write`
+- `ecommerce:read`
+- `ecommerce:write`
 - `usuarios:read`
 - `usuarios:write`
 - `webhooks:read`
@@ -337,6 +388,7 @@ Endpoints externos iniciales:
 - `GET /api/v1/ext/wallets/{wallet_id}` requiere `wallets:read`.
 - `POST /api/v1/ext/movimientos/deposito` requiere `movimientos:write`.
 - `POST /api/v1/ext/movimientos/cashback` requiere `movimientos:write`.
+- `POST /api/v1/ext/ecommerce/order-paid` requiere `ecommerce:write`.
 - `GET /api/v1/ext/movimientos` requiere `movimientos:read`.
 
 Los endpoints externos operan solo dentro de la organizacion de la API Key. Nunca aceptan `organizacion_id` como fuente confiable.
@@ -358,6 +410,9 @@ Eventos soportados:
 - `movimiento.creado`
 - `movimiento.revertido`
 - `pago_organizacion.creado`
+- `ecommerce.order_paid`
+- `ecommerce.order_processed`
+- `ecommerce.order_failed`
 - `recompensa.aplicada`
 - `notificacion.creada`
 - `organizacion.suspendida`
@@ -939,10 +994,11 @@ Contenido incluido:
 
 - Introduccion a Wallet SaaS como infraestructura.
 - Autenticacion externa con `X-API-Key`.
-- Tabla de scopes: `wallets:read`, `wallets:write`, `movimientos:read`, `movimientos:write`, `usuarios:read`, `usuarios:write`, `webhooks:read`, `webhooks:write`.
-- Endpoints externos: `GET /api/v1/ext/wallets/{wallet_id}`, `POST /api/v1/ext/movimientos/deposito`, `POST /api/v1/ext/movimientos/cashback`, `GET /api/v1/ext/movimientos`.
-- Recompensas API con JWT: reglas, simulacion, aplicacion manual y consulta de aplicaciones quedan documentadas como endpoints internos por ahora; API externa de recompensas queda para una fase futura.
-- Eventos webhook: `wallet.creada`, `movimiento.creado`, `movimiento.revertido`, `pago_organizacion.creado`, `recompensa.aplicada`, `notificacion.creada`, `organizacion.suspendida`.
+- Tabla de scopes: `wallets:read`, `wallets:write`, `movimientos:read`, `movimientos:write`, `ecommerce:read`, `ecommerce:write`, `usuarios:read`, `usuarios:write`, `webhooks:read`, `webhooks:write`.
+- Endpoints externos: `GET /api/v1/ext/wallets/{wallet_id}`, `POST /api/v1/ext/movimientos/deposito`, `POST /api/v1/ext/movimientos/cashback`, `GET /api/v1/ext/movimientos`, `POST /api/v1/ext/ecommerce/order-paid`.
+- Ecommerce Integration: compra pagada externa, deduplicacion por `external_order_id`, scopes y ejemplo curl.
+- Recompensas API con JWT: reglas, simulacion, aplicacion manual y consulta de aplicaciones quedan documentadas como endpoints internos.
+- Eventos webhook: `wallet.creada`, `movimiento.creado`, `movimiento.revertido`, `pago_organizacion.creado`, `ecommerce.order_paid`, `ecommerce.order_processed`, `ecommerce.order_failed`, `recompensa.aplicada`, `notificacion.creada`, `organizacion.suspendida`.
 - Headers de firma: `X-Wallet-Signature`, `X-Wallet-Event`, `X-Wallet-Delivery-Id`.
 - Sandbox local con usuarios demo por rol.
 

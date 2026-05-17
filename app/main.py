@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.apps.admin.routes import router as admin_router
 from app.apps.auditoria.routes import router as auditoria_router
 from app.apps.auth.routes import router as auth_router
+from app.apps.ecommerce.routes import ext_router as ecommerce_ext_router
+from app.apps.ecommerce.routes import router as ecommerce_router
 from app.apps.integraciones.routes import ext_router as integraciones_ext_router
 from app.apps.integraciones.routes import router as integraciones_router
 from app.apps.movimientos.routes import router as movimientos_router
@@ -23,7 +25,7 @@ from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="1.7.0-alpha",
+    version="1.8.0-alpha",
     description=(
         "API multi-tenant para Wallet SaaS. Incluye configuracion de branding "
         "y preparacion white-label por organizacion."
@@ -51,6 +53,8 @@ app.include_router(wallets_router, prefix=API_V1_PREFIX)
 app.include_router(movimientos_router, prefix=API_V1_PREFIX)
 app.include_router(integraciones_router, prefix=API_V1_PREFIX)
 app.include_router(integraciones_ext_router, prefix=API_V1_PREFIX)
+app.include_router(ecommerce_router, prefix=API_V1_PREFIX)
+app.include_router(ecommerce_ext_router, prefix=API_V1_PREFIX)
 app.include_router(admin_router, prefix=API_V1_PREFIX)
 app.include_router(auditoria_router, prefix=API_V1_PREFIX)
 app.include_router(notificaciones_router, prefix=API_V1_PREFIX)

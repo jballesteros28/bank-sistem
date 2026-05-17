@@ -93,11 +93,18 @@ def test_seed_demo_crea_roles_wallets_movimientos_y_no_duplica(db_session: Sessi
 
     api_keys = db_session.scalars(select(APIKey).where(APIKey.nombre == DEMO_API_KEY_NAME)).all()
     assert len(api_keys) == 1
-    assert api_keys[0].activa is False
-    assert api_keys[0].scopes == ["wallets:read", "movimientos:read", "movimientos:write"]
+    assert api_keys[0].activa is True
+    assert api_keys[0].scopes == [
+        "wallets:read",
+        "movimientos:read",
+        "movimientos:write",
+        "ecommerce:read",
+        "ecommerce:write",
+    ]
 
     webhooks = db_session.scalars(select(WebhookEndpoint).where(WebhookEndpoint.nombre == DEMO_WEBHOOK_NAME)).all()
     assert len(webhooks) == 1
     assert webhooks[0].activo is False
     assert webhooks[0].url == "https://example.com/webhook-demo"
+    assert "ecommerce.order_paid" in webhooks[0].eventos
     assert "recompensa.aplicada" in webhooks[0].eventos

@@ -24,6 +24,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.apps.auditoria.models import AuditLog  # noqa: F401
+from app.apps.ecommerce.models import EcommerceOrderEvent  # noqa: F401
 from app.apps.integraciones.models import APIKey, WebhookDelivery, WebhookEndpoint  # noqa: F401
 from app.apps.integraciones.services import encrypt_webhook_secret
 from app.apps.movimientos.models import Movimiento
@@ -88,7 +89,13 @@ DEMO_USERS = {
     "cliente": {**DEMO_CLIENT, "rol": RolUsuario.cliente},
 }
 DEMO_API_KEY_NAME = "API Key Demo"
-DEMO_API_KEY_SCOPES = ["wallets:read", "movimientos:read", "movimientos:write"]
+DEMO_API_KEY_SCOPES = [
+    "wallets:read",
+    "movimientos:read",
+    "movimientos:write",
+    "ecommerce:read",
+    "ecommerce:write",
+]
 DEMO_WEBHOOK_NAME = "Webhook Demo"
 DEMO_WEBHOOK_SECRET = "demo-webhook-secret"
 DEMO_REWARD_RULE_NAME = "Cashback Demo 10%"
@@ -374,7 +381,7 @@ def _ensure_demo_api_key(db: Session, *, organizacion: Organizacion) -> tuple[AP
     api_key.organizacion_id = organizacion.id
     api_key.nombre = DEMO_API_KEY_NAME
     api_key.scopes = DEMO_API_KEY_SCOPES
-    api_key.activa = False
+    api_key.activa = True
     api_key.ultimo_uso_en = None
     db.flush()
     return api_key, raw_key
@@ -397,7 +404,14 @@ def _ensure_demo_webhook(db: Session, *, organizacion: Organizacion) -> WebhookE
 
     webhook.nombre = DEMO_WEBHOOK_NAME
     webhook.url = "https://example.com/webhook-demo"
-    webhook.eventos = ["movimiento.creado", "pago_organizacion.creado", "recompensa.aplicada"]
+    webhook.eventos = [
+        "movimiento.creado",
+        "pago_organizacion.creado",
+        "ecommerce.order_paid",
+        "ecommerce.order_processed",
+        "ecommerce.order_failed",
+        "recompensa.aplicada",
+    ]
     webhook.activo = False
     db.flush()
     return webhook
@@ -588,7 +602,7 @@ def seed_demo(db: Session) -> dict[str, str]:
         usuario_id=users["soporte"].id,
         tipo=TipoNotificacion.seguridad,
         titulo="Revision de integraciones pendiente",
-        mensaje="Hay una API Key y un webhook demo inactivos para revisar en integraciones.",
+        mensaje="Hay una API Key ecommerce activa y un webhook demo inactivo para revisar en integraciones.",
         metadata={"api_key_scope": ",".join(DEMO_API_KEY_SCOPES), "seed": "dev_demo"},
     )
     _ensure_notification(
@@ -676,7 +690,7 @@ def main() -> None:
     print(f"- wallet owner: {summary['owner_wallet_id']}")
     print(f"- wallet admin: {summary['admin_wallet_id']}")
     print("Integraciones demo:")
-    print(f"- API Key inactiva: {summary['api_key_demo_id']} ({summary['api_key_prefix']})")
+    print(f"- API Key ecommerce activa: {summary['api_key_demo_id']} ({summary['api_key_prefix']})")
     if summary["api_key_raw"]:
         print(f"- API Key real creada por primera vez: {summary['api_key_raw']}")
     else:
