@@ -30,6 +30,9 @@ const PlanesPage = lazy(() =>
 const IntegracionesPage = lazy(() =>
   import("../features/integraciones/pages/IntegracionesPage").then((module) => ({ default: module.IntegracionesPage })),
 );
+const RecompensasPage = lazy(() =>
+  import("../features/recompensas/pages/RecompensasPage").then((module) => ({ default: module.RecompensasPage })),
+);
 const DeveloperPage = lazy(() =>
   import("../features/developer/pages/DeveloperPage").then((module) => ({ default: module.DeveloperPage })),
 );
@@ -82,6 +85,7 @@ export const router = createBrowserRouter([
       { path: "/branding", element: lazyRoute(BrandingPage) },
       { path: "/planes", element: lazyRoute(PlanesPage) },
       { path: "/integraciones", element: lazyRoute(IntegracionesPage) },
+      { path: "/recompensas", element: lazyRoute(RecompensasPage) },
       { path: "/developer", element: lazyRoute(DeveloperPage) },
       { path: "/usuarios", element: lazyRoute(UsuariosPage) },
     ],

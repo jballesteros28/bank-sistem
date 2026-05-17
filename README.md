@@ -123,10 +123,12 @@ Que probar manualmente:
 - Wallets.
 - Movimientos.
 - Integraciones.
+- Recompensas.
 - Developer Portal en `/developer` con owner, admin, soporte o super admin.
 - Login cliente.
 - Dashboard cliente.
 - Pago a organizacion.
+- Mis recompensas en `/recompensas`.
 - Confirmar que cliente no ve Developer en el sidebar.
 
 ## Comandos
@@ -468,7 +470,7 @@ src/
 Rutas:
 
 - Publicas: `/login`, `/onboarding`
-- Privadas: `/dashboard`, `/wallets`, `/movimientos`, `/notificaciones`, `/branding`, `/planes`, `/integraciones`
+- Privadas: `/dashboard`, `/wallets`, `/movimientos`, `/notificaciones`, `/branding`, `/planes`, `/integraciones`, `/recompensas`, `/developer`, `/usuarios`
 
 Flujo Auth + Onboarding validado para FASE 14.2:
 
@@ -886,6 +888,49 @@ Deliveries:
 - Solo se habilita reenviar deliveries `fallido` o `pendiente`, usando `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar`.
 - Un fallo cargando deliveries no rompe las tabs de API Keys o Webhooks.
 
+### Recompensas UI
+
+La ruta privada `/recompensas` permite administrar loyalty y store credit desde el frontend. La feature vive en `src/features/recompensas`, usa Axios centralizado, TanStack Query por panel, React Hook Form + Zod para formularios y carga lazy desde el router.
+
+Endpoints consumidos:
+
+- `GET /api/v1/recompensas/reglas`
+- `POST /api/v1/recompensas/reglas`
+- `GET /api/v1/recompensas/reglas/{regla_id}`
+- `PATCH /api/v1/recompensas/reglas/{regla_id}`
+- `POST /api/v1/recompensas/simular`
+- `POST /api/v1/recompensas/aplicar`
+- `GET /api/v1/recompensas/aplicaciones?skip=0&limit=100`
+- `GET /api/v1/recompensas/aplicaciones/me?skip=0&limit=100`
+
+Roles en UI:
+
+- `owner`, `admin` y `super_admin`: ven reglas, simulador, aplicacion manual y aplicaciones; pueden crear/editar reglas y aplicar recompensas.
+- `soporte`: ve reglas, simulador y aplicaciones; no ve acciones de creacion, edicion ni aplicacion manual.
+- `cliente`: ve solo `Mis recompensas`, con totales por moneda calculados client-side.
+
+Reglas:
+
+- El formulario permite configurar `cashback`, `puntos` o `credito_tienda`, estado `activa`, `inactiva` o `pausada`, moneda `ARS`, `USD` o `PUNTOS`, porcentaje, monto fijo, minimos, topes, acumulabilidad y vigencia.
+- La UI valida que exista porcentaje o monto fijo y que `fecha_fin` sea posterior a `fecha_inicio`.
+- Al guardar se invalidan queries de recompensas para refrescar listados.
+
+Simulador:
+
+- Permite ingresar `monto_compra`, seleccionar una regla opcional o filtrar por tipo.
+- Muestra si aplica, monto de compra, monto de recompensa, moneda y motivo devuelto por backend.
+
+Aplicacion manual:
+
+- Disponible para roles administrativos.
+- Solicita `usuario_id`, `wallet_destino_id`, `monto_compra`, regla opcional, `referencia_externa` y metadata JSON opcional.
+- Al aplicar invalida recompensas, movimientos, wallets y dashboard para reflejar la acreditacion.
+
+Vista cliente:
+
+- Consume `/recompensas/aplicaciones/me`.
+- Muestra recompensas recibidas, total acumulado por moneda y estados loading/error/empty propios.
+
 ### Developer Portal
 
 La ruta privada `/developer` documenta el uso tecnico de integraciones externas. Es visible en el sidebar para `owner`, `admin`, `soporte` y `super_admin`; el rol `cliente` no ve la entrada y recibe un estado sin permisos si intenta acceder directo.
@@ -896,6 +941,7 @@ Contenido incluido:
 - Autenticacion externa con `X-API-Key`.
 - Tabla de scopes: `wallets:read`, `wallets:write`, `movimientos:read`, `movimientos:write`, `usuarios:read`, `usuarios:write`, `webhooks:read`, `webhooks:write`.
 - Endpoints externos: `GET /api/v1/ext/wallets/{wallet_id}`, `POST /api/v1/ext/movimientos/deposito`, `POST /api/v1/ext/movimientos/cashback`, `GET /api/v1/ext/movimientos`.
+- Recompensas API con JWT: reglas, simulacion, aplicacion manual y consulta de aplicaciones quedan documentadas como endpoints internos por ahora; API externa de recompensas queda para una fase futura.
 - Eventos webhook: `wallet.creada`, `movimiento.creado`, `movimiento.revertido`, `pago_organizacion.creado`, `recompensa.aplicada`, `notificacion.creada`, `organizacion.suspendida`.
 - Headers de firma: `X-Wallet-Signature`, `X-Wallet-Event`, `X-Wallet-Delivery-Id`.
 - Sandbox local con usuarios demo por rol.
@@ -994,7 +1040,7 @@ Configuracion y limpieza:
 
 Frontend:
 
-- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes, integraciones y usuarios.
+- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes, integraciones, recompensas, developer y usuarios.
 - El build quedo dividido por pagina; el chunk inicial bajo a ~496 kB y desaparecio el warning de Vite por chunk mayor a 500 kB.
 - Las dependencias frontend actuales estan en uso: React, React DOM, React Router, Axios, TanStack Query, Zustand, React Hook Form, Zod, resolvers, Tailwind, ESLint y Vite.
 - Se reviso seguridad local: el store de auth persiste solo token/user; API Keys y webhook secrets viven solo en formularios/modales y no se guardan en storage global.

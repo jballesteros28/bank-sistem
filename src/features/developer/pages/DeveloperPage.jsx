@@ -3,6 +3,7 @@ import { LockKeyhole } from "lucide-react";
 import { ApiKeyGuide } from "../components/ApiKeyGuide";
 import { CurlExamples } from "../components/CurlExamples";
 import { DeveloperHero } from "../components/DeveloperHero";
+import { RewardsApiGuide } from "../components/RewardsApiGuide";
 import { SandboxGuide } from "../components/SandboxGuide";
 import { ScopesGuide } from "../components/ScopesGuide";
 import { WebhookSignatureGuide } from "../components/WebhookSignatureGuide";
@@ -42,6 +43,7 @@ export function DeveloperPage() {
         <ApiKeyGuide />
         <SandboxGuide />
       </div>
+      <RewardsApiGuide />
       <ScopesGuide />
       <CurlExamples />
       <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">

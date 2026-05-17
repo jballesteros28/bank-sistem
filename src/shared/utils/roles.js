@@ -95,6 +95,26 @@ export function canViewDeveloperPortal(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
 }
 
+export function canViewRewards(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user) || isClient(user);
+}
+
+export function canManageRewardRules(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
+export function canApplyRewards(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
+export function canSimulateRewards(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
+}
+
+export function canViewRewardApplications(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user) || isClient(user);
+}
+
 export function canViewUsers(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
 }

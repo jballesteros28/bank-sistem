@@ -51,4 +51,12 @@ export const endpoints = {
     webhookDeliveries: "/integraciones/webhooks/deliveries",
     reenviarDelivery: (deliveryId) => `/integraciones/webhooks/deliveries/${deliveryId}/reenviar`,
   },
+  recompensas: {
+    reglas: "/recompensas/reglas",
+    regla: (reglaId) => `/recompensas/reglas/${reglaId}`,
+    simular: "/recompensas/simular",
+    aplicar: "/recompensas/aplicar",
+    aplicaciones: "/recompensas/aplicaciones",
+    misAplicaciones: "/recompensas/aplicaciones/me",
+  },
 };
