@@ -125,6 +125,7 @@ Que probar manualmente:
 - Movimientos.
 - Integraciones.
 - Recompensas.
+- Ecommerce en `/ecommerce`.
 - Developer Portal en `/developer` con owner, admin, soporte o super admin.
 - Login cliente.
 - Dashboard cliente.
@@ -312,6 +313,8 @@ Endpoints principales:
 ## Ecommerce Integration
 
 Wallet SaaS no procesa dinero real. El pago real ocurre fuera del sistema, por ejemplo en Tienda Nube, Shopify, WooCommerce, Mercado Pago u otra tienda. Cuando la tienda confirma una compra pagada, llama a `POST /api/v1/ext/ecommerce/order-paid` con una API Key de la organizacion y el backend acredita una recompensa interna si hay una regla activa aplicable.
+
+La auditoria visual del flujo esta disponible en `/ecommerce` para `owner`, `admin`, `soporte` y `super_admin`.
 
 Flujo:
 
@@ -986,6 +989,43 @@ Vista cliente:
 - Consume `/recompensas/aplicaciones/me`.
 - Muestra recompensas recibidas, total acumulado por moneda y estados loading/error/empty propios.
 
+### Ecommerce UI
+
+La ruta privada `/ecommerce` permite visualizar y auditar ordenes recibidas desde tiendas externas. La feature vive en `src/features/ecommerce`, usa Axios centralizado, TanStack Query, filtros client-side y carga lazy desde el router.
+
+Roles en UI:
+
+- `owner`, `admin` y `super_admin`: ven resumen, curl de prueba, tabla de ordenes y detalle; tambien pueden gestionar API Keys desde `/integraciones`.
+- `soporte`: ve la auditoria ecommerce en modo lectura, sin acciones de gestion de API Keys.
+- `cliente`: no ve Ecommerce en el sidebar y recibe un estado sin permisos si intenta acceder directo.
+
+Endpoints consumidos:
+
+- `GET /api/v1/ecommerce/orders?skip=0&limit=100`
+- `GET /api/v1/ecommerce/orders/{event_id}`
+- `POST /api/v1/ext/ecommerce/order-paid` queda documentado como endpoint externo para tiendas con API Key.
+
+Flujo de prueba:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/ext/ecommerce/order-paid \
+  -H "X-API-Key: wsk_test_xxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "proveedor": "generic",
+    "external_order_id": "order-1001",
+    "customer_email": "cliente@demo.com",
+    "customer_name": "Cliente Demo",
+    "amount": 20000,
+    "currency": "ARS",
+    "metadata": {
+      "source": "tienda-demo"
+    }
+  }'
+```
+
+La API Key debe incluir `ecommerce:write`; la consulta visual requiere usuario JWT con permisos de lectura. Si hay regla activa, el flujo crea o reutiliza cliente y wallet, aplica cashback/store credit, genera movimiento, registra auditoria y permite seguir la aplicacion desde `/recompensas`. Los errores de procesamiento quedan visibles en tabla y modal junto con el `raw_payload`.
+
 ### Developer Portal
 
 La ruta privada `/developer` documenta el uso tecnico de integraciones externas. Es visible en el sidebar para `owner`, `admin`, `soporte` y `super_admin`; el rol `cliente` no ve la entrada y recibe un estado sin permisos si intenta acceder directo.
@@ -996,7 +1036,7 @@ Contenido incluido:
 - Autenticacion externa con `X-API-Key`.
 - Tabla de scopes: `wallets:read`, `wallets:write`, `movimientos:read`, `movimientos:write`, `ecommerce:read`, `ecommerce:write`, `usuarios:read`, `usuarios:write`, `webhooks:read`, `webhooks:write`.
 - Endpoints externos: `GET /api/v1/ext/wallets/{wallet_id}`, `POST /api/v1/ext/movimientos/deposito`, `POST /api/v1/ext/movimientos/cashback`, `GET /api/v1/ext/movimientos`, `POST /api/v1/ext/ecommerce/order-paid`.
-- Ecommerce Integration: compra pagada externa, deduplicacion por `external_order_id`, scopes y ejemplo curl.
+- Ecommerce Integration: compra pagada externa, deduplicacion por `external_order_id`, scopes, ejemplo curl y link interno a `/ecommerce`.
 - Recompensas API con JWT: reglas, simulacion, aplicacion manual y consulta de aplicaciones quedan documentadas como endpoints internos.
 - Eventos webhook: `wallet.creada`, `movimiento.creado`, `movimiento.revertido`, `pago_organizacion.creado`, `ecommerce.order_paid`, `ecommerce.order_processed`, `ecommerce.order_failed`, `recompensa.aplicada`, `notificacion.creada`, `organizacion.suspendida`.
 - Headers de firma: `X-Wallet-Signature`, `X-Wallet-Event`, `X-Wallet-Delivery-Id`.
@@ -1096,7 +1136,7 @@ Configuracion y limpieza:
 
 Frontend:
 
-- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes, integraciones, recompensas, developer y usuarios.
+- Las rutas privadas principales usan `React.lazy` + `Suspense` con `LoadingScreen`: dashboard, wallets, movimientos, notificaciones, branding, planes, integraciones, recompensas, ecommerce, developer y usuarios.
 - El build quedo dividido por pagina; el chunk inicial bajo a ~496 kB y desaparecio el warning de Vite por chunk mayor a 500 kB.
 - Las dependencias frontend actuales estan en uso: React, React DOM, React Router, Axios, TanStack Query, Zustand, React Hook Form, Zod, resolvers, Tailwind, ESLint y Vite.
 - Se reviso seguridad local: el store de auth persiste solo token/user; API Keys y webhook secrets viven solo en formularios/modales y no se guardan en storage global.

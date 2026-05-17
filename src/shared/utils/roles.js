@@ -115,6 +115,14 @@ export function canViewRewardApplications(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user) || isClient(user);
 }
 
+export function canViewEcommerce(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
+}
+
+export function canManageEcommerce(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
+}
+
 export function canViewUsers(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
 }

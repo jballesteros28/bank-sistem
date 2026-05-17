@@ -70,6 +70,7 @@ class EcommerceOrderEventResponse(BaseModel):
     amount: Decimal
     currency: str
     status: str
+    raw_payload: dict[str, Any] | None = None
     procesado: bool
     recompensa_aplicada_id: UUID | None = None
     error_procesamiento: str | None = None

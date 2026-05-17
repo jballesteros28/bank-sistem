@@ -1,8 +1,20 @@
 import { NavLink } from "react-router-dom";
-import { Bell, Code2, CreditCard, Gift, Home, KeyRound, Layers3, Palette, ReceiptText, UsersRound } from "lucide-react";
+import {
+  Bell,
+  Code2,
+  CreditCard,
+  Gift,
+  Home,
+  KeyRound,
+  Layers3,
+  Palette,
+  ReceiptText,
+  ShoppingBag,
+  UsersRound,
+} from "lucide-react";
 
 import { APP_NAME, ROUTES } from "../../utils/constants";
-import { canViewDeveloperPortal, canViewRewards, canViewUsers } from "../../utils/roles";
+import { canViewDeveloperPortal, canViewEcommerce, canViewRewards, canViewUsers } from "../../utils/roles";
 import { useAuth } from "../../hooks/useAuth";
 
 const navItems = [
@@ -14,6 +26,7 @@ const navItems = [
   { label: "Planes", to: ROUTES.planes, icon: Layers3 },
   { label: "Integraciones", to: ROUTES.integraciones, icon: KeyRound },
   { label: "Recompensas", to: ROUTES.recompensas, icon: Gift, canView: canViewRewards },
+  { label: "Ecommerce", to: ROUTES.ecommerce, icon: ShoppingBag, canView: canViewEcommerce },
   { label: "Developer", to: ROUTES.developer, icon: Code2, canView: canViewDeveloperPortal },
   { label: "Usuarios", to: ROUTES.usuarios, icon: UsersRound, canView: canViewUsers },
 ];

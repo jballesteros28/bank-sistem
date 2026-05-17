@@ -59,4 +59,8 @@ export const endpoints = {
     aplicaciones: "/recompensas/aplicaciones",
     misAplicaciones: "/recompensas/aplicaciones/me",
   },
+  ecommerce: {
+    orders: "/ecommerce/orders",
+    order: (eventId) => `/ecommerce/orders/${eventId}`,
+  },
 };
