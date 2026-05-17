@@ -154,6 +154,51 @@ npm run build
 npm run preview
 ```
 
+## Docker local
+
+El entorno Docker local levanta PostgreSQL, backend y frontend con Compose. No usa secretos reales y corre con `ENVIRONMENT=development`; para produccion real hay que reemplazar secrets, DB y dominios.
+
+Construir y levantar:
+
+```bash
+docker compose build
+docker compose up
+```
+
+Cuando el backend este listo, cargar datos demo opcionales:
+
+```bash
+docker compose exec backend python scripts/dev_seed.py
+```
+
+URLs:
+
+- Frontend: `http://localhost:3000`
+- Backend docs: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+- Ready: `http://localhost:8000/ready`
+
+Accesos demo despues del seed:
+
+- Owner: `owner@demo.com` / `Password123!`
+- Cliente: `cliente@demo.com` / `Password123!`
+
+Reset del entorno Docker:
+
+```bash
+docker compose down -v
+docker compose up --build
+docker compose exec backend python scripts/dev_seed.py
+```
+
+Troubleshooting:
+
+- Puertos ocupados: ajustar `3000:80`, `8000:8000` o `5432:5432` en `docker-compose.yml`.
+- Cambios de `VITE_API_BASE_URL`: reconstruir el frontend porque Vite hornea variables en build.
+- CORS: Compose local permite `http://localhost:3000` y `http://127.0.0.1:3000`.
+- Migraciones: el backend ejecuta `python -m alembic upgrade head` al iniciar.
+- Postgres health: `backend` espera `pg_isready`; si `/ready` falla, revisar logs de `postgres` y `backend`.
+
 ## Preparacion para produccion
 
 La guia completa esta en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Esta fase no hace deploy: solo deja backend y frontend listos para correr fuera del entorno local.

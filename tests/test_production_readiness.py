@@ -98,3 +98,12 @@ def test_dev_scripts_abort_in_production(monkeypatch: pytest.MonkeyPatch) -> Non
         dev_seed._ensure_dev_database_safety()
     with pytest.raises(SystemExit, match="production"):
         reset_local_db._ensure_dev_database_safety()
+
+
+def test_dev_scripts_accept_docker_compose_database_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    docker_database_url = "postgresql+psycopg2://postgres:postgres@postgres:5432/wallet_saas"
+    monkeypatch.setattr(dev_seed.settings, "DATABASE_URL", docker_database_url)
+    monkeypatch.setattr(reset_local_db.settings, "DATABASE_URL", docker_database_url)
+
+    assert dev_seed._database_safety_issues() == []
+    assert reset_local_db._database_safety_issues() == []

@@ -1,6 +1,6 @@
 # Deployment
 
-Esta guia deja el proyecto listo para correr fuera del entorno local. No cubre Docker ni el deploy cloud final.
+Esta guia deja el proyecto listo para correr fuera del entorno local y para levantar un entorno local completo con Docker Compose. No cubre el deploy cloud final.
 
 ## Ambientes
 
@@ -77,6 +77,54 @@ npm run preview
 
 El build genera `dist/`. No versionar `.env`, `.env.local` ni `dist/`.
 
+## Docker Local
+
+El Compose local levanta PostgreSQL, backend FastAPI y frontend React servido por Nginx. Usa `ENVIRONMENT=development` para permitir secretos demo locales y no debe usarse como configuracion final de produccion sin cambios.
+
+Servicios:
+
+- `postgres`: PostgreSQL con volumen `postgres_data`.
+- `backend`: FastAPI en `http://localhost:8000`, ejecuta migraciones con Alembic al iniciar.
+- `frontend`: Nginx sirviendo el build Vite en `http://localhost:3000`.
+
+Comandos:
+
+```bash
+docker compose build
+docker compose up
+```
+
+En otra terminal, cargar datos demo cuando el backend este healthy:
+
+```bash
+docker compose exec backend python scripts/dev_seed.py
+```
+
+URLs:
+
+- Frontend: `http://localhost:3000`
+- Backend docs: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+- Readiness: `http://localhost:8000/ready`
+
+Reset completo del entorno Docker local:
+
+```bash
+docker compose down -v
+docker compose up --build
+docker compose exec backend python scripts/dev_seed.py
+```
+
+El seed no corre automaticamente para evitar datos demo en entornos equivocados.
+
+Para produccion real:
+
+- Usar `ENVIRONMENT=production`.
+- Reemplazar `SECRET_KEY` por un secreto fuerte.
+- Apuntar `DATABASE_URL` a PostgreSQL administrado o al servicio productivo real.
+- Configurar `CORS_ORIGINS`, `FRONTEND_URL` y `BACKEND_URL` con dominios reales.
+- No usar passwords demo de Compose.
+
 ## Scripts Locales
 
 `scripts/dev_seed.py` y `scripts/reset_local_db.py` son solo para desarrollo. Ambos abortan con `ENVIRONMENT=production` y tambien frenan si `DATABASE_URL` no parece local. No usarlos contra una DB productiva.
@@ -114,3 +162,11 @@ Vite env:
 
 - Las variables deben empezar con `VITE_`.
 - Cambios de `.env` requieren reiniciar `npm run dev` o reconstruir con `npm run build`.
+
+Docker:
+
+- Puertos ocupados: cambiar los mappings `3000:80`, `8000:8000` o `5432:5432` en `docker-compose.yml`.
+- `VITE_API_BASE_URL`: se hornea en el build del frontend; si cambia, reconstruir `frontend`.
+- CORS: el backend local Docker permite `http://localhost:3000` y `http://127.0.0.1:3000`.
+- Migraciones: el backend corre `python -m alembic upgrade head` al iniciar; revisar logs si `/ready` devuelve `503`.
+- Postgres health: `backend` espera `pg_isready` antes de iniciar.

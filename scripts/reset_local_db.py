@@ -34,8 +34,8 @@ def _database_safety_issues() -> list[str]:
     host = (url.host or "").lower()
     if "wallet_saas" not in database_name:
         issues.append("El nombre de base en DATABASE_URL debe contener 'wallet_saas'.")
-    if host not in {"localhost", "127.0.0.1"}:
-        issues.append("DATABASE_URL debe apuntar a localhost o 127.0.0.1.")
+    if host not in {"localhost", "127.0.0.1", "postgres"}:
+        issues.append("DATABASE_URL debe apuntar a localhost, 127.0.0.1 o al servicio Docker postgres.")
     return issues
 
 
