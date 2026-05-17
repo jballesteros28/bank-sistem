@@ -3,7 +3,7 @@ import { Plus, Search } from "lucide-react";
 import { Button } from "../../../shared/components/ui/Button";
 import { movementStatusOptions, movementTypeOptions } from "../movementUtils";
 
-export function MovementsToolbar({ filters, onChange, onCreate, canCreate }) {
+export function MovementsToolbar({ filters, onChange, onCreate, canCreate, createLabel = "Crear movimiento" }) {
   const updateFilter = (field, value) => {
     onChange({ ...filters, [field]: value });
   };
@@ -56,7 +56,7 @@ export function MovementsToolbar({ filters, onChange, onCreate, canCreate }) {
       </div>
       {canCreate ? (
         <Button icon={Plus} onClick={onCreate} className="xl:mb-0">
-          Crear movimiento
+          {createLabel}
         </Button>
       ) : null}
     </div>

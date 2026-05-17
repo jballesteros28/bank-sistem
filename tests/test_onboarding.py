@@ -41,3 +41,34 @@ def test_onboarding_crea_organizacion_owner_y_wallet_principal(
     assert db_session.get(Usuario, UUID(data["owner"]["id"])) is not None
     assert db_session.get(Wallet, UUID(data["wallet_principal"]["id"])) is not None
     assert db_session.get(Wallet, UUID(data["wallet_organizacion_principal"]["id"])) is not None
+
+
+def test_onboarding_devuelve_error_claro_para_slug_duplicado(client: TestClient) -> None:
+    payload = onboarding_payload(slug="tenant-duplicado")
+    creado = client.post("/api/v1/onboarding/registro-organizacion", json=payload)
+    assert creado.status_code == 201, creado.text
+
+    repetido = client.post("/api/v1/onboarding/registro-organizacion", json=payload)
+
+    assert repetido.status_code == 400
+    assert repetido.json() == {
+        "success": False,
+        "error": "HTTPException",
+        "detail": "Ya existe una organizacion con ese slug.",
+    }
+
+
+def test_onboarding_devuelve_error_claro_para_email_duplicado(client: TestClient) -> None:
+    payload = onboarding_payload(email="owner-duplicado@example.com")
+    creado = client.post("/api/v1/onboarding/registro-organizacion", json=payload)
+    assert creado.status_code == 201, creado.text
+
+    repetido_email = onboarding_payload(slug="tenant-email-duplicado", email=payload["owner"]["email"])
+    repetido = client.post("/api/v1/onboarding/registro-organizacion", json=repetido_email)
+
+    assert repetido.status_code == 400
+    assert repetido.json() == {
+        "success": False,
+        "error": "HTTPException",
+        "detail": "Ya existe un usuario con ese email.",
+    }

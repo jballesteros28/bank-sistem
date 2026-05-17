@@ -38,7 +38,7 @@
  * @property {string} organizacion_id
  * @property {string} monto
  * @property {"ARS"|"USD"|"PUNTOS"} moneda
- * @property {"deposito"|"retiro"|"transferencia"|"pago"|"cashback"|"ajuste_admin"|"reversa"} tipo
+ * @property {"deposito"|"retiro"|"transferencia"|"pago"|"cashback"|"credito_tienda"|"ajuste_admin"|"reversa"} tipo
  * @property {"aprobada"|"pendiente"|"rechazada"|"cancelada"|"revertida"} estado
  */
 

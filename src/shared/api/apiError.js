@@ -22,6 +22,13 @@ export function getApiErrorMessage(error) {
     }
     return "Revisa los campos marcados e intenta nuevamente.";
   }
+  if (Array.isArray(data?.details) && data.details.length > 0) {
+    const messages = data.details.map(formatValidationError).filter(Boolean);
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
+    return "Revisa los campos marcados e intenta nuevamente.";
+  }
   if (typeof data?.error === "string") {
     return data.error;
   }
@@ -47,4 +54,8 @@ export function getApiValidationErrors(error) {
 
 export function isUnauthorizedError(error) {
   return error?.response?.status === 401;
+}
+
+export function getApiErrorStatus(error) {
+  return error?.response?.status;
 }

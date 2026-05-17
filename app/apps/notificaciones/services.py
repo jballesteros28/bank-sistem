@@ -44,6 +44,7 @@ MOVIMIENTO_TIPO_NOTIFICACION = {
     TipoMovimiento.transferencia: TipoNotificacion.movimiento_transferencia,
     TipoMovimiento.pago: TipoNotificacion.movimiento_pago,
     TipoMovimiento.cashback: TipoNotificacion.movimiento_cashback,
+    TipoMovimiento.credito_tienda: TipoNotificacion.recompensa_aplicada,
     TipoMovimiento.ajuste_admin: TipoNotificacion.movimiento_ajuste_admin,
     TipoMovimiento.reversa: TipoNotificacion.movimiento_reversa,
 }
@@ -590,7 +591,7 @@ def _usuarios_para_movimiento(movimiento: MovimientoResponse, db: Session) -> li
         if usuario is not None and all(existing.id != usuario.id for existing in usuarios):
             usuarios.append(usuario)
 
-    if movimiento.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback}:
+    if movimiento.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback, TipoMovimiento.credito_tienda}:
         add_wallet_owner(destino)
     elif movimiento.tipo == TipoMovimiento.retiro:
         add_wallet_owner(origen)
@@ -611,6 +612,8 @@ def _texto_movimiento(movimiento: MovimientoResponse) -> tuple[str, str]:
         return "Retiro debitado", "Se debitó saldo de tu wallet."
     if movimiento.tipo == TipoMovimiento.cashback:
         return "Cashback recibido", "Recibiste cashback."
+    if movimiento.tipo == TipoMovimiento.credito_tienda:
+        return "Recompensa recibida", "Recibiste credito interno o puntos en tu wallet."
     if movimiento.tipo == TipoMovimiento.ajuste_admin and operation == "debito":
         return "Ajuste administrativo", "Se debitó saldo de tu wallet por un ajuste administrativo."
     if movimiento.tipo == TipoMovimiento.ajuste_admin:

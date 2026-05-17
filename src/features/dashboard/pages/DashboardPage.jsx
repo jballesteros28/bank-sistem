@@ -7,17 +7,16 @@ import { OrganizationWalletCard } from "../components/OrganizationWalletCard";
 import { PlanSummaryCard } from "../components/PlanSummaryCard";
 import { QuickActions } from "../components/QuickActions";
 import { RecentMovementsCard } from "../components/RecentMovementsCard";
+import { ClientDashboard } from "../components/client/ClientDashboard";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { ErrorState } from "../../../shared/components/feedback/ErrorState";
-import { Card } from "../../../shared/components/ui/Card";
 import { useAuth } from "../../../shared/hooks/useAuth";
 import { formatCurrency, formatLimit, formatNumber } from "../../../shared/utils/formatters";
-
-const CLIENT_ROLE = "cliente";
+import { isClient } from "../../../shared/utils/roles";
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const isClientDashboard = user?.rol === CLIENT_ROLE;
+  const isClientDashboard = isClient(user);
   const dashboard = useDashboardData({ enabled: !isClientDashboard });
 
   const branding = dashboard.brandingQuery.data;
@@ -35,17 +34,7 @@ export function DashboardPage() {
     : `Limite mensual: ${plan ? formatLimit(plan.limite_movimientos_mes) : "no disponible"}`;
 
   if (isClientDashboard) {
-    return (
-      <div className="space-y-6">
-        <DashboardHeader user={user} branding={branding} />
-        <Card>
-          <h2 className="text-base font-semibold text-slate-950">Dashboard cliente en preparacion</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Esta vista esta enfocada ahora en owners y admins. El resumen para clientes se conectara en una fase futura.
-          </p>
-        </Card>
-      </div>
-    );
+    return <ClientDashboard />;
   }
 
   return (

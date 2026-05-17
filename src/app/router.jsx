@@ -30,6 +30,9 @@ const PlanesPage = lazy(() =>
 const IntegracionesPage = lazy(() =>
   import("../features/integraciones/pages/IntegracionesPage").then((module) => ({ default: module.IntegracionesPage })),
 );
+const DeveloperPage = lazy(() =>
+  import("../features/developer/pages/DeveloperPage").then((module) => ({ default: module.DeveloperPage })),
+);
 const UsuariosPage = lazy(() =>
   import("../features/usuarios/pages/UsuariosPage").then((module) => ({ default: module.UsuariosPage })),
 );
@@ -79,6 +82,7 @@ export const router = createBrowserRouter([
       { path: "/branding", element: lazyRoute(BrandingPage) },
       { path: "/planes", element: lazyRoute(PlanesPage) },
       { path: "/integraciones", element: lazyRoute(IntegracionesPage) },
+      { path: "/developer", element: lazyRoute(DeveloperPage) },
       { path: "/usuarios", element: lazyRoute(UsuariosPage) },
     ],
   },

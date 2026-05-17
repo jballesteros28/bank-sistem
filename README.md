@@ -1,6 +1,6 @@
 # Wallet SaaS API
 
-Backend modular para una plataforma Wallet SaaS multi-tenant. El dominio publico gira alrededor de organizaciones, usuarios, wallets, movimientos, onboarding, admin, auditoria y notificaciones.
+Backend modular para una plataforma Wallet SaaS multi-tenant. El dominio publico gira alrededor de organizaciones, usuarios, wallets internas, movimientos, recompensas, onboarding, admin, auditoria y notificaciones.
 
 ## Stack
 
@@ -32,6 +32,7 @@ app/
     auditoria/
     notificaciones/
     planes/
+    recompensas/
   middlewares/
 alembic/
 tests/
@@ -62,20 +63,77 @@ Si `psycopg2` muestra un mensaje con encoding ilegible, verificar primero que Po
 
 ## IDs publicos
 
-Los IDs publicos principales usan UUID: organizaciones, planes, usuarios, wallets, movimientos, auditoria y notificaciones. En desarrollo se puede resetear la DB local cuando cambie la migracion inicial.
+Los IDs publicos principales usan UUID: organizaciones, planes, usuarios, wallets, movimientos, recompensas, auditoria y notificaciones.
 
-Reset local recomendado:
+## Entorno local de pruebas
+
+Estos comandos son solo para desarrollo local. Los scripts abortan con `ENVIRONMENT=production` y tambien frenan si `DATABASE_URL` no apunta a una base local cuyo nombre contenga `wallet_saas`, salvo que se use el flag explicito `--allow-unsafe-database`.
+
+Reset completo de base local, migraciones y datos demo:
 
 ```bash
-dropdb wallet_saas
-createdb wallet_saas
-python -m alembic upgrade head
+python scripts/reset_local_db.py --yes
 ```
+
+Solo cargar o actualizar el seed demo:
+
+```bash
+python scripts/dev_seed.py
+```
+
+Levantar backend:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Levantar frontend:
+
+```bash
+npm run dev
+```
+
+Accesos demo:
+
+- Super admin: `superadmin@demo.com` / `Password123!`
+- Owner: `owner@demo.com` / `Password123!`
+- Admin: `admin@demo.com` / `Password123!`
+- Soporte: `soporte@demo.com` / `Password123!`
+- Cliente: `cliente@demo.com` / `Password123!`
+
+El seed deja lista la organizacion `Demo Wallet`, usuarios para todos los roles, wallet empresa con saldo, wallets de owner/admin/cliente, movimientos demo, regla y aplicacion de recompensa demo, notificaciones demo, una API Key demo inactiva y un webhook demo inactivo. Es idempotente para desarrollo: reutiliza los registros demo existentes, restablece saldos/credenciales y no duplica datos base.
+
+Datos demo principales:
+
+- Organizacion: `Demo Wallet` (`demo-wallet`)
+- Wallet empresa: `Wallet Empresa Demo`, saldo `50000 ARS`
+- Wallet cliente: `Wallet Cliente Demo`, saldo `10000 ARS`
+- Wallet owner: `Wallet Owner Demo`, saldo `5000 ARS`
+- Wallet admin: `Wallet Admin Demo`, saldo `3000 ARS`
+- Movimientos seed: `seed-deposito-cliente`, `seed-pago-cliente-organizacion`, `seed-cashback-cliente`, `seed-recompensa-demo`, `seed-ajuste-organizacion`
+- Regla recompensa: `Cashback Demo 10%`, compra minima `1000 ARS`, tope `2000 ARS`, recompensa demo esperada `1500 ARS`
+- API Key demo: inactiva por defecto, scopes `wallets:read`, `movimientos:read`, `movimientos:write`
+- Webhook demo: inactivo, URL `https://example.com/webhook-demo`, eventos `movimiento.creado`, `pago_organizacion.creado` y `recompensa.aplicada`
+
+Que probar manualmente:
+
+- Login owner.
+- Dashboard owner.
+- Usuarios.
+- Wallets.
+- Movimientos.
+- Integraciones.
+- Developer Portal en `/developer` con owner, admin, soporte o super admin.
+- Login cliente.
+- Dashboard cliente.
+- Pago a organizacion.
+- Confirmar que cliente no ve Developer en el sidebar.
 
 ## Comandos
 
 ```bash
 alembic upgrade head
+python scripts/dev_seed.py
 uvicorn app.main:app --reload
 pytest -q
 ```
@@ -120,6 +178,11 @@ Validacion frontend completada en FASE 14.1.1:
 - `POST /api/v1/movimientos/pago`
 - `POST /api/v1/movimientos/pago-organizacion`
 - `POST /api/v1/movimientos/{movimiento_id}/reversa`
+- `POST /api/v1/recompensas/reglas`
+- `GET /api/v1/recompensas/reglas`
+- `POST /api/v1/recompensas/simular`
+- `POST /api/v1/recompensas/aplicar`
+- `GET /api/v1/recompensas/aplicaciones`
 - `GET /api/v1/admin/resumen`
 - `GET /api/v1/auditoria`
 - `GET /api/v1/notificaciones`
@@ -179,17 +242,18 @@ Los movimientos registran cambios de saldo internos dentro de una organizacion. 
   - `deposito`: acredita una wallet destino. `wallet_origen_id=NULL`.
   - `retiro`: debita una wallet origen. `wallet_destino_id=NULL`.
   - `cashback`: acredita una wallet destino. `wallet_origen_id=NULL`.
+  - `credito_tienda`: acredita credito interno o puntos en una wallet destino. `wallet_origen_id=NULL`.
   - `ajuste_admin`: puede ser `credito` o `debito`; el credito usa solo destino y el debito usa solo origen.
 - Operaciones entre dos wallets:
   - `transferencia`: debita origen y acredita destino.
   - `pago`: debita origen y acredita destino.
   - `pago-organizacion`: debita una wallet de usuario y acredita una wallet de organizacion.
 
-`wallet_origen_id` y `wallet_destino_id` son opcionales en la tabla `movimientos` para representar correctamente depositos, retiros, cashback, ajustes y reversas. Las operaciones entre dos wallets requieren ambos IDs y bloquean origen y destino iguales.
+`wallet_origen_id` y `wallet_destino_id` son opcionales en la tabla `movimientos` para representar correctamente depositos, retiros, cashback, credito de tienda, ajustes y reversas. Las operaciones entre dos wallets requieren ambos IDs y bloquean origen y destino iguales.
 
 Las reversas son contables: no borran el movimiento original. El backend crea un movimiento tipo `reversa`, guarda `movimiento_origen_id`, marca el original como `revertida` y mueve el saldo inverso segun el tipo original:
 
-- Deposito, cashback o ajuste credito: debita la wallet destino original.
+- Deposito, cashback, credito de tienda o ajuste credito: debita la wallet destino original.
 - Retiro o ajuste debito: acredita la wallet origen original.
 - Transferencia, pago o pago a organizacion: debita el destino original y acredita el origen original.
 
@@ -203,6 +267,41 @@ Flujo comercial usuario a organizacion:
 Endpoint especifico:
 
 - `POST /api/v1/movimientos/pago-organizacion`: pago comercial interno desde usuario hacia organizacion.
+
+## Recompensas / Store Credit
+
+El modulo de recompensas permite que cada organizacion configure reglas de fidelizacion para acreditar cashback, puntos o credito interno en wallets del usuario. No representa dinero real ni saldos bancarios: es valor virtual usable dentro de la organizacion.
+
+Una regla de recompensa define nombre, tipo, estado, moneda de recompensa, porcentaje de cashback o monto fijo, compra minima, tope maximo, vigencia y si es acumulable. El backend siempre resuelve `organizacion_id` desde el usuario autenticado o el alcance del `super_admin`; el frontend no es fuente confiable para asignar una regla a otra organizacion.
+
+Tipos soportados:
+
+- `cashback`: calcula un porcentaje sobre la compra y acredita un movimiento tipo `cashback`.
+- `puntos`: acredita puntos en una wallet `PUNTOS` usando movimiento `credito_tienda`.
+- `credito_tienda`: acredita saldo interno en `ARS`, `USD` o `PUNTOS` usando movimiento `credito_tienda`.
+
+Calculo:
+
+- Si la regla tiene `porcentaje_cashback`, recompensa = `monto_compra * porcentaje / 100`.
+- Si la regla tiene `monto_fijo`, acredita ese monto.
+- Si existe `monto_maximo_recompensa`, se aplica como tope.
+- Si la compra no alcanza `monto_minimo_compra`, la regla no aplica.
+- Las reglas `inactiva`, `pausada` o fuera de vigencia no aplican.
+
+Ejemplo: una tienda registra una compra externa de `$20.000` y tiene una regla de cashback del `10%`; el cliente recibe `$2.000` virtuales en su wallet interna de la organizacion.
+
+Aplicar una recompensa valida usuario, wallet, organizacion y moneda; acredita la wallet destino, crea movimiento, guarda auditoria en `aplicaciones_recompensa`, genera notificacion interna y dispara el webhook `recompensa.aplicada` cuando hay endpoints activos. Si se informa `referencia_externa`, no se permite duplicar la misma referencia dentro de la organizacion.
+
+Endpoints principales:
+
+- `POST /api/v1/recompensas/reglas`: crea una regla para `owner`, `admin` o `super_admin`.
+- `GET /api/v1/recompensas/reglas`: lista reglas visibles para `owner`, `admin`, `soporte` o `super_admin`.
+- `GET /api/v1/recompensas/reglas/{regla_id}`: obtiene una regla.
+- `PATCH /api/v1/recompensas/reglas/{regla_id}`: edita o cambia estado de una regla.
+- `POST /api/v1/recompensas/simular`: calcula si una compra recibiria recompensa sin acreditar saldo.
+- `POST /api/v1/recompensas/aplicar`: aplica la recompensa y crea movimiento.
+- `GET /api/v1/recompensas/aplicaciones`: lista aplicaciones de la organizacion.
+- `GET /api/v1/recompensas/aplicaciones/me`: lista recompensas del usuario autenticado.
 
 ## Integraciones
 
@@ -257,6 +356,7 @@ Eventos soportados:
 - `movimiento.creado`
 - `movimiento.revertido`
 - `pago_organizacion.creado`
+- `recompensa.aplicada`
 - `notificacion.creada`
 - `organizacion.suspendida`
 
@@ -401,8 +501,8 @@ Flujo Auth + Onboarding validado para FASE 14.2:
 
 Credenciales de prueba:
 
-- No hay credenciales fijas versionadas para el frontend.
-- Para probar manualmente, crear una organizacion nueva desde `/onboarding` y usar el email/password del owner creado.
+- Para el entorno local seed/demo: `superadmin@demo.com`, `owner@demo.com`, `admin@demo.com`, `soporte@demo.com` y `cliente@demo.com` usan `Password123!`.
+- Tambien se puede crear una organizacion nueva desde `/onboarding` y usar el email/password del owner creado.
 
 El cliente HTTP usa `VITE_API_BASE_URL + VITE_API_PREFIX`, agrega `Authorization: Bearer <token>`, desempaqueta respuestas `{ success, message, data }` y limpia la sesion ante `401`. El token queda en `localStorage` por ahora; queda marcado el TODO para migrar a cookies HttpOnly en produccion.
 
@@ -477,7 +577,7 @@ Validacion local completada:
 
 ### Dashboard Owner
 
-El dashboard privado de `/dashboard` muestra informacion real para usuarios `owner` y `admin` autenticados. Tambien degrada por seccion si un endpoint no aplica al rol actual, por ejemplo `soporte` o `super_admin` sin organizacion asociada.
+El dashboard privado de `/dashboard` muestra informacion real para usuarios `owner`, `admin` y roles de consulta autenticados. Tambien degrada por seccion si un endpoint no aplica al rol actual, por ejemplo `soporte` o `super_admin` sin organizacion asociada.
 
 Endpoints consumidos:
 
@@ -504,7 +604,6 @@ Limitaciones actuales:
 
 - Los accesos rapidos navegan a las secciones existentes; todavia no abren modales ni crean recursos directamente desde el dashboard.
 - Los movimientos recientes muestran los ultimos 5 registros disponibles sin filtros avanzados.
-- Si el usuario tiene rol `cliente`, se muestra una pantalla de preparacion para un dashboard especifico futuro.
 - Si un endpoint falla por permisos o falta de organizacion, el dashboard conserva las demas secciones y muestra el error puntual.
 
 Validacion FASE 14.3:
@@ -512,6 +611,49 @@ Validacion FASE 14.3:
 - UI E2E owner: onboarding, login, dashboard real, refresh, logout y token invalido OK.
 - Dashboard owner mostro `Free`, limite de 3 wallets, `Wallet empresa`, saldo ARS, movimientos recientes y notificaciones no leidas.
 - Endpoints del dashboard respondieron `200` durante la prueba UI.
+
+### Dashboard Cliente
+
+El rol `cliente` ahora tiene una experiencia propia en `/dashboard`, separada del panel operativo de la organizacion. La pantalla se enfoca en saldo, pagos, movimientos personales y notificaciones, sin mostrar planes, integraciones, branding ni usuarios.
+
+Endpoints consumidos:
+
+- `GET /api/v1/wallets`: obtiene solo las wallets de usuario visibles para el cliente.
+- `GET /api/v1/movimientos?skip=0&limit=5`: obtiene los movimientos recientes asociados a sus wallets.
+- `GET /api/v1/notificaciones/no-leidas/count`: muestra pendientes personales.
+- `GET /api/v1/organizaciones/me/branding`: muestra el nombre comercial de la organizacion.
+- `POST /api/v1/movimientos/pago-organizacion`: registra pagos desde una wallet de usuario hacia una wallet de organizacion.
+
+Datos visibles:
+
+- Saludo personalizado y nombre comercial de la organizacion.
+- Wallet principal del cliente, o la primera wallet disponible si ninguna viene marcada como principal.
+- Alias, saldo, moneda, estado y tipo de wallet.
+- Ultimos movimientos con tipo, monto, moneda, estado y fecha.
+- Contador de notificaciones no leidas.
+- Accesos a pagar a organizacion, movimientos y notificaciones.
+
+Pago a organizacion:
+
+- El formulario permite seleccionar una wallet origen activa del cliente.
+- El destino se ingresa manualmente como `wallet_destino_id`, porque el cliente no puede listar wallets de organizacion con el contrato actual.
+- Si no hay wallet activa, la accion queda bloqueada con empty state.
+- Si no hay saldo suficiente, el backend responde `Saldo insuficiente.` y la UI muestra el error.
+- Al pagar correctamente, se invalidan queries de `movimientos`, `wallets` y `dashboard`.
+
+Flujo cliente:
+
+1. Un owner/admin crea un usuario `cliente` desde `/usuarios`.
+2. Un owner/admin crea o asigna una wallet de usuario para ese cliente si hace falta.
+3. El cliente inicia sesion y entra a `/dashboard`.
+4. Puede consultar sus wallets en `/wallets`, sus movimientos en `/movimientos` y sus notificaciones en `/notificaciones`.
+5. Puede pagar a una wallet de organizacion si conoce el ID destino y tiene saldo suficiente.
+
+Limitaciones actuales:
+
+- Crear un cliente desde `/usuarios` no crea automaticamente una wallet principal. Queda pendiente para una fase backend futura: auto-crear wallet principal para nuevos usuarios `cliente`.
+- El cliente no puede descubrir wallets de organizacion desde UI; necesita que la organizacion le comparta el ID de destino.
+- El dashboard cliente carga hasta 5 movimientos recientes; los filtros completos siguen en `/movimientos`.
 
 ### Wallets UI
 
@@ -542,7 +684,7 @@ Roles en UI:
 
 - `owner`, `admin` y `super_admin`: pueden ver y crear wallets de organizacion cuando tienen una organizacion en alcance.
 - `soporte`: puede ver wallets de organizacion, pero no ve el boton de creacion.
-- `cliente`: no puede listar ni crear wallets de organizacion; la seccion aparece bloqueada y conserva la lista de wallets de usuario.
+- `cliente`: ve solo sus wallets de usuario. No ve secciones ni acciones de organizacion.
 
 La pantalla muestra loading, error y empty states por seccion; cards con alias, tipo, `owner_type`, moneda, saldo, estado, limite por operacion, marca principal y fecha de creacion; y al crear invalida queries de `wallets` y `dashboard`.
 
@@ -569,7 +711,7 @@ Operaciones soportadas desde UI:
 
 - `owner`, `admin` y `super_admin`: deposito, retiro, transferencia, pago a organizacion, cashback, ajuste admin y reversa de movimientos aprobados.
 - `soporte`: consulta movimientos, sin acciones de creacion ni reversa.
-- `cliente`: ve sus movimientos y puede iniciar pago a organizacion; con el contrato actual no puede listar wallets de organizacion, por lo que el formulario permite ingresar el ID destino si no hay wallets seleccionables.
+- `cliente`: ve sus movimientos y solo puede iniciar `pago-organizacion`; con el contrato actual no puede listar wallets de organizacion, por lo que el formulario permite ingresar el ID destino manualmente.
 
 Campos principales:
 
@@ -743,6 +885,46 @@ Deliveries:
 - La tabla muestra evento, status, `status_code`, intentos, fechas, error y accion de reenvio.
 - Solo se habilita reenviar deliveries `fallido` o `pendiente`, usando `POST /api/v1/integraciones/webhooks/deliveries/{delivery_id}/reenviar`.
 - Un fallo cargando deliveries no rompe las tabs de API Keys o Webhooks.
+
+### Developer Portal
+
+La ruta privada `/developer` documenta el uso tecnico de integraciones externas. Es visible en el sidebar para `owner`, `admin`, `soporte` y `super_admin`; el rol `cliente` no ve la entrada y recibe un estado sin permisos si intenta acceder directo.
+
+Contenido incluido:
+
+- Introduccion a Wallet SaaS como infraestructura.
+- Autenticacion externa con `X-API-Key`.
+- Tabla de scopes: `wallets:read`, `wallets:write`, `movimientos:read`, `movimientos:write`, `usuarios:read`, `usuarios:write`, `webhooks:read`, `webhooks:write`.
+- Endpoints externos: `GET /api/v1/ext/wallets/{wallet_id}`, `POST /api/v1/ext/movimientos/deposito`, `POST /api/v1/ext/movimientos/cashback`, `GET /api/v1/ext/movimientos`.
+- Eventos webhook: `wallet.creada`, `movimiento.creado`, `movimiento.revertido`, `pago_organizacion.creado`, `recompensa.aplicada`, `notificacion.creada`, `organizacion.suspendida`.
+- Headers de firma: `X-Wallet-Signature`, `X-Wallet-Event`, `X-Wallet-Delivery-Id`.
+- Sandbox local con usuarios demo por rol.
+
+Ejemplos curl principales:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/ext/movimientos/deposito \
+  -H "X-API-Key: wsk_test_xxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{ "wallet_destino_id": "...", "monto": 1000, "descripcion": "Carga externa" }'
+
+curl -X POST http://127.0.0.1:8000/api/v1/ext/movimientos/cashback \
+  -H "X-API-Key: wsk_test_xxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{ "wallet_destino_id": "...", "monto": 250, "descripcion": "Cashback compra" }'
+
+curl -X GET http://127.0.0.1:8000/api/v1/ext/movimientos \
+  -H "X-API-Key: wsk_test_xxxxx"
+```
+
+Flujo recomendado para pruebas manuales:
+
+1. Ejecutar `python scripts/reset_local_db.py --yes`.
+2. Levantar backend con `uvicorn app.main:app --reload`.
+3. Levantar frontend con `npm run dev`.
+4. Iniciar sesion como `owner@demo.com`, `admin@demo.com`, `soporte@demo.com` o `superadmin@demo.com`.
+5. Entrar a `/developer` y revisar API Keys, scopes, webhooks, HMAC y sandbox.
+6. Iniciar sesion como `cliente@demo.com` y confirmar que Developer no aparece en el sidebar.
 
 ### Validacion E2E Integraciones
 

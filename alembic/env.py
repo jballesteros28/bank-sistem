@@ -12,6 +12,7 @@ from app.apps.movimientos.models import Movimiento  # noqa: F401
 from app.apps.notificaciones.models import Notificacion  # noqa: F401
 from app.apps.organizaciones.models import Organizacion  # noqa: F401
 from app.apps.planes.models import Plan  # noqa: F401
+from app.apps.recompensas.models import AplicacionRecompensa, ReglaRecompensa  # noqa: F401
 from app.apps.usuarios.models import Usuario  # noqa: F401
 from app.apps.wallets.models import Wallet  # noqa: F401
 

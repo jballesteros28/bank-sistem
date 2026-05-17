@@ -120,7 +120,7 @@ def _validate_movement_consistency(
     if wallet_origen_id is not None and wallet_destino_id is not None and wallet_origen_id == wallet_destino_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede operar sobre la misma wallet.")
 
-    if tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback}:
+    if tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback, TipoMovimiento.credito_tienda}:
         if wallet_origen_id is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El movimiento no debe tener wallet origen.")
         if wallet_destino_id is None:
@@ -640,7 +640,7 @@ def crear_reversa(
     reversa_origen: Wallet | None = None
     reversa_destino: Wallet | None = None
 
-    if original.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback}:
+    if original.tipo in {TipoMovimiento.deposito, TipoMovimiento.cashback, TipoMovimiento.credito_tienda}:
         destino = _require_original_wallet(original_destino, "destino")
         _ensure_balance(destino, amount)
         destino.saldo = _amount(destino.saldo) - amount

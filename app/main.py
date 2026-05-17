@@ -11,6 +11,7 @@ from app.apps.notificaciones.routes import router as notificaciones_router
 from app.apps.onboarding.routes import router as onboarding_router
 from app.apps.organizaciones.routes import router as organizaciones_router
 from app.apps.planes.routes import router as planes_router
+from app.apps.recompensas.routes import router as recompensas_router
 from app.apps.usuarios.routes import router as usuarios_router
 from app.apps.wallets.routes import router as wallets_router
 from app.core.api import API_V1_PREFIX
@@ -22,7 +23,7 @@ from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="1.6.1-alpha",
+    version="1.7.0-alpha",
     description=(
         "API multi-tenant para Wallet SaaS. Incluye configuracion de branding "
         "y preparacion white-label por organizacion."
@@ -44,6 +45,7 @@ app.include_router(auth_router, prefix=API_V1_PREFIX)
 app.include_router(onboarding_router, prefix=API_V1_PREFIX)
 app.include_router(organizaciones_router, prefix=API_V1_PREFIX)
 app.include_router(planes_router, prefix=API_V1_PREFIX)
+app.include_router(recompensas_router, prefix=API_V1_PREFIX)
 app.include_router(usuarios_router, prefix=API_V1_PREFIX)
 app.include_router(wallets_router, prefix=API_V1_PREFIX)
 app.include_router(movimientos_router, prefix=API_V1_PREFIX)

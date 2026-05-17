@@ -106,6 +106,11 @@ export function OnboardingForm() {
 
   return (
     <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+      {errors.root?.message ? (
+        <p role="alert" className="rounded-md bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
+          {errors.root.message}
+        </p>
+      ) : null}
       <div>
         <h2 className="text-sm font-semibold text-slate-950">Organizacion</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -138,7 +143,6 @@ export function OnboardingForm() {
           />
         </div>
       </div>
-      {errors.root?.message ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{errors.root.message}</p> : null}
       {mutation.isSuccess ? <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">{ONBOARDING_SUCCESS_MESSAGE}</p> : null}
       <Button type="submit" icon={Building2} loading={mutation.isPending}>
         Crear organizacion

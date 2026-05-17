@@ -23,6 +23,7 @@ ALLOWED_WEBHOOK_EVENTS = {
     "movimiento.creado",
     "movimiento.revertido",
     "pago_organizacion.creado",
+    "recompensa.aplicada",
     "notificacion.creada",
     "organizacion.suspendida",
 }

@@ -42,12 +42,31 @@ class MonedaWallet(StrEnum):
     PUNTOS = "PUNTOS"
 
 
+class TipoRecompensa(StrEnum):
+    cashback = "cashback"
+    puntos = "puntos"
+    credito_tienda = "credito_tienda"
+
+
+class EstadoReglaRecompensa(StrEnum):
+    activa = "activa"
+    inactiva = "inactiva"
+    pausada = "pausada"
+
+
+class MonedaRecompensa(StrEnum):
+    ARS = "ARS"
+    USD = "USD"
+    PUNTOS = "PUNTOS"
+
+
 class TipoMovimiento(StrEnum):
     deposito = "deposito"
     retiro = "retiro"
     transferencia = "transferencia"
     pago = "pago"
     cashback = "cashback"
+    credito_tienda = "credito_tienda"
     ajuste_admin = "ajuste_admin"
     reversa = "reversa"
 
@@ -68,6 +87,7 @@ class TipoNotificacion(StrEnum):
     movimiento_transferencia = "movimiento_transferencia"
     movimiento_pago = "movimiento_pago"
     movimiento_cashback = "movimiento_cashback"
+    recompensa_aplicada = "recompensa_aplicada"
     movimiento_ajuste_admin = "movimiento_ajuste_admin"
     movimiento_reversa = "movimiento_reversa"
     wallet_congelada = "wallet_congelada"

@@ -16,6 +16,7 @@ export const WEBHOOK_EVENT_OPTIONS = [
   { value: "movimiento.creado", label: "Movimiento creado" },
   { value: "movimiento.revertido", label: "Movimiento revertido" },
   { value: "pago_organizacion.creado", label: "Pago a organizacion creado" },
+  { value: "recompensa.aplicada", label: "Recompensa aplicada" },
   { value: "notificacion.creada", label: "Notificacion creada" },
   { value: "organizacion.suspendida", label: "Organizacion suspendida" },
 ];

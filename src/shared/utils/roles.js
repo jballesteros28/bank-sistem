@@ -91,6 +91,10 @@ export function canViewWebhookDeliveries(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
 }
 
+export function canViewDeveloperPortal(user) {
+  return isOwner(user) || isAdmin(user) || isSuperAdmin(user) || isSupport(user);
+}
+
 export function canViewUsers(user) {
   return isOwner(user) || isAdmin(user) || isSuperAdmin(user);
 }

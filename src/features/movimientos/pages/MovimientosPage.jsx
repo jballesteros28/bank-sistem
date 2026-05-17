@@ -108,6 +108,7 @@ export function MovimientosPage() {
         onChange={setFilters}
         onCreate={() => setCreateModalOpen(true)}
         canCreate={canCreate}
+        createLabel={canCreateClientPayment(user) && !canCreateFinancialMovement(user) ? "Pagar a organizacion" : "Crear movimiento"}
       />
 
       <Card>

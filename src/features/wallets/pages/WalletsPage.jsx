@@ -11,7 +11,7 @@ import { Button } from "../../../shared/components/ui/Button";
 import { Card, CardHeader } from "../../../shared/components/ui/Card";
 import { EmptyState } from "../../../shared/components/ui/EmptyState";
 import { useAuth } from "../../../shared/hooks/useAuth";
-import { canManageOrganizationWallets, canViewOrganizationWallets } from "../../../shared/utils/roles";
+import { canManageOrganizationWallets, canViewOrganizationWallets, isClient } from "../../../shared/utils/roles";
 
 function isNotFound(error) {
   return error?.response?.status === 404;
@@ -23,10 +23,11 @@ export function WalletsPage() {
 
   const organizationId = user?.organizacion_id || "current";
   const hasToken = Boolean(token);
+  const isClientUser = isClient(user);
   const canViewOrganization = canViewOrganizationWallets(user);
   const canManageOrganization = canManageOrganizationWallets(user);
   const hasOrganization = Boolean(user?.organizacion_id);
-  const canLoadOrganizationWallets = hasToken && canViewOrganization && hasOrganization;
+  const canLoadOrganizationWallets = hasToken && canViewOrganization && hasOrganization && !isClientUser;
 
   const userWalletsQuery = useQuery({
     queryKey: walletQueryKeys.user(organizationId),
@@ -53,6 +54,29 @@ export function WalletsPage() {
   const principalWallet = principalNotFound ? null : organizationPrincipalQuery.data;
   const organizationWallets = organizationWalletsQuery.data || [];
   const userWallets = userWalletsQuery.data || [];
+
+  if (isClientUser) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal text-slate-950">Mis wallets</h1>
+          <p className="mt-1 text-sm text-slate-500">Consulta saldos y estados de tus wallets asignadas.</p>
+        </div>
+
+        <Card>
+          <CardHeader title="Mis wallets" description="Wallets de usuario visibles para tu sesion." />
+          <WalletsList
+            wallets={userWallets}
+            loading={userWalletsQuery.isLoading}
+            error={userWalletsQuery.error}
+            emptyTitle="Sin wallets asignadas"
+            emptyDescription="Todavia no tenes wallets de usuario disponibles."
+            onRetry={() => userWalletsQuery.refetch()}
+          />
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
