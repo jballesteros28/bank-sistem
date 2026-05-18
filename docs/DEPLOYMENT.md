@@ -1,6 +1,6 @@
 # Deployment
 
-Esta guia deja el proyecto listo para correr fuera del entorno local y para levantar un entorno local completo con Docker Compose. No cubre el deploy cloud final.
+Esta guia cubre el deploy real recomendado con Railway para backend + PostgreSQL y Vercel para frontend. Tambien documenta el entorno local completo con Docker Compose.
 
 ## Ambientes
 
@@ -8,7 +8,7 @@ Esta guia deja el proyecto listo para correr fuera del entorno local y para leva
 - `testing`: usado por pytest con base aislada.
 - `production`: exige configuracion explicita y segura para secretos, DB y CORS.
 
-## Backend
+## Backend Railway
 
 Variables principales:
 
@@ -20,7 +20,7 @@ SECRET_KEY=generar-un-valor-largo-y-aleatorio-de-32-caracteres-o-mas
 CORS_ORIGINS=https://wallet-demo.vercel.app
 EMAILS_ENABLED=false
 FRONTEND_URL=https://wallet-demo.vercel.app
-BACKEND_URL=https://tu-backend-demo.onrender.com
+BACKEND_URL=https://wallet-saas-backend.up.railway.app
 LOG_LEVEL=INFO
 ```
 
@@ -35,27 +35,36 @@ Reglas de produccion:
 Comandos recomendados:
 
 ```bash
-python -m alembic upgrade head
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
+sh scripts/docker_start.sh
 ```
 
-Para una primera demo en Render o Railway alcanza con `uvicorn`. Si luego se necesita un proceso manager, evaluar `gunicorn` con worker Uvicorn en una fase separada.
+Railway usa `Dockerfile.backend` y `railway.json`. El comando de arranque corre `python -m alembic upgrade head` y despues levanta Uvicorn en `PORT` con fallback local a `8000`.
+
+Pasos Railway:
+
+1. Crear un proyecto en Railway.
+2. Agregar PostgreSQL administrado.
+3. Crear el servicio backend desde el repositorio.
+4. Confirmar que el builder use `Dockerfile.backend`; `railway.json` ya define el path.
+5. Configurar las variables de entorno anteriores. `DATABASE_URL` debe venir del PostgreSQL de Railway.
+6. Deployar backend y esperar que el healthcheck `/ready` quede verde.
+7. Copiar la URL publica del backend para usarla en Vercel y en `BACKEND_URL`.
 
 Health checks:
 
 ```bash
-curl https://tu-backend-demo.onrender.com/health
-curl https://tu-backend-demo.onrender.com/ready
+curl https://wallet-saas-backend.up.railway.app/health
+curl https://wallet-saas-backend.up.railway.app/ready
 ```
 
 `/health` valida que la app responde. `/ready` ejecuta un `SELECT 1` contra la DB y devuelve `503` si no esta disponible.
 
-## Frontend
+## Frontend Vercel
 
 Variables Vite:
 
 ```env
-VITE_API_BASE_URL=https://tu-backend-demo.onrender.com
+VITE_API_BASE_URL=https://wallet-saas-backend.up.railway.app
 VITE_API_PREFIX=/api/v1
 VITE_APP_NAME=Wallet SaaS
 ```
@@ -74,6 +83,18 @@ npm run lint
 npm run build
 npm run preview
 ```
+
+Pasos Vercel:
+
+1. Deployar el backend primero y verificar `/ready`.
+2. Crear el proyecto frontend en Vercel desde el mismo repositorio.
+3. Configurar build command `npm run build` y output directory `dist`.
+4. Configurar `VITE_API_BASE_URL` con la URL publica del backend Railway.
+5. Configurar `VITE_API_PREFIX=/api/v1` y `VITE_APP_NAME=Wallet SaaS`.
+6. Deployar frontend.
+7. Volver a Railway y actualizar `CORS_ORIGINS` y `FRONTEND_URL` con el dominio final de Vercel; redeployar backend si Railway no reinicia automaticamente.
+
+`vercel.json` reescribe `/(.*)` a `/index.html` para que rutas SPA como `/dashboard`, `/wallets` y `/ecommerce` funcionen al refrescar.
 
 El build genera `dist/`. No versionar `.env`, `.env.local` ni `dist/`.
 
@@ -166,7 +187,9 @@ Vite env:
 Docker:
 
 - Puertos ocupados: cambiar los mappings `3000:80`, `8000:8000` o `5432:5432` en `docker-compose.yml`.
+- Docker Desktop en Windows: si `docker version` muestra `Access is denied` contra `C:\Users\<usuario>\.docker\config.json` o `//./pipe/docker_engine`, iniciar Docker Desktop, usar el contexto `desktop-linux` y ejecutar la terminal con permisos para acceder al daemon.
 - `VITE_API_BASE_URL`: se hornea en el build del frontend; si cambia, reconstruir `frontend`.
 - CORS: el backend local Docker permite `http://localhost:3000` y `http://127.0.0.1:3000`.
 - Migraciones: el backend corre `python -m alembic upgrade head` al iniciar; revisar logs si `/ready` devuelve `503`.
 - Postgres health: `backend` espera `pg_isready` antes de iniciar.
+- PowerShell + curl: si un `POST` con JSON inline devuelve `422 json_invalid`, guardar el payload en un `.json` y usar `curl.exe --data-binary "@payload.json"` para evitar que PowerShell altere las comillas.

@@ -194,37 +194,41 @@ docker compose exec backend python scripts/dev_seed.py
 Troubleshooting:
 
 - Puertos ocupados: ajustar `3000:80`, `8000:8000` o `5432:5432` en `docker-compose.yml`.
+- Docker Desktop en Windows: si `docker version` muestra `Access is denied` contra `.docker/config.json` o `//./pipe/docker_engine`, iniciar Docker Desktop, usar el contexto `desktop-linux` y correr la terminal con permisos para acceder al daemon.
 - Cambios de `VITE_API_BASE_URL`: reconstruir el frontend porque Vite hornea variables en build.
 - CORS: Compose local permite `http://localhost:3000` y `http://127.0.0.1:3000`.
 - Migraciones: el backend ejecuta `python -m alembic upgrade head` al iniciar.
 - Postgres health: `backend` espera `pg_isready`; si `/ready` falla, revisar logs de `postgres` y `backend`.
+- PowerShell + curl: si un JSON inline devuelve `422 json_invalid`, guardar el payload en un archivo y usar `curl.exe --data-binary "@payload.json"`.
 
 ## Preparacion para produccion
 
-La guia completa esta en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Esta fase no hace deploy: solo deja backend y frontend listos para correr fuera del entorno local.
+La guia completa esta en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). El orden recomendado para deploy real es: primero backend en Railway con PostgreSQL, despues frontend en Vercel apuntando a la URL publica del backend.
 
-Backend:
+Backend Railway:
 
 - Variables obligatorias: `ENVIRONMENT=production`, `DEBUG=false`, `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, `FRONTEND_URL`, `BACKEND_URL` y `LOG_LEVEL=INFO`.
+- `DATABASE_URL` debe apuntar al PostgreSQL administrado de Railway. Usar el formato SQLAlchemy `postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DB_NAME`.
 - `SECRET_KEY` debe ser largo y aleatorio; `change-me` y valores cortos son rechazados en production.
-- `CORS_ORIGINS` se configura como CSV real, por ejemplo `https://wallet-demo.vercel.app,https://admin.wallet-demo.com`; no usar `*` en production.
-- Antes de correr la app: `python -m alembic upgrade head`.
-- Comando recomendado para primera demo: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-- Health checks disponibles: `GET /health` y `GET /ready`.
+- `CORS_ORIGINS` se configura como CSV real, por ejemplo `https://wallet-demo.vercel.app`; no usar `*` en production.
+- Railway usa `Dockerfile.backend`, `railway.json` y `sh scripts/docker_start.sh`; ese script ejecuta `python -m alembic upgrade head` antes de levantar Uvicorn.
+- Health checks disponibles: `GET /health` y `GET /ready`; Railway usa `/ready` para validar DB.
 - `EMAILS_ENABLED=true` solo cuando SMTP este configurado.
 
-Frontend:
+Frontend Vercel:
 
-- Variables Vite: `VITE_API_BASE_URL`, `VITE_API_PREFIX=/api/v1` y `VITE_APP_NAME=Wallet SaaS`.
-- En local usar `VITE_API_BASE_URL=http://127.0.0.1:8000`; en produccion usar la URL real del backend.
-- Build: `npm run build`; preview local: `npm run preview`.
+- Variables Vite: `VITE_API_BASE_URL=https://<backend-railway>.up.railway.app`, `VITE_API_PREFIX=/api/v1` y `VITE_APP_NAME=Wallet SaaS`.
+- Build command: `npm run build`; output directory: `dist`.
+- `vercel.json` reescribe `/(.*)` a `/index.html` para que `/dashboard`, `/wallets`, `/ecommerce` y otras rutas SPA funcionen al refrescar.
 - Los ejemplos curl del Developer Portal usan localhost como sandbox local; para produccion reemplazar host y API Key por datos del entorno real.
 
 Checklist:
 
 - Cambiar `SECRET_KEY`.
-- Configurar PostgreSQL cloud y ejecutar migraciones.
-- Configurar `CORS_ORIGINS` con el dominio frontend real.
+- Crear PostgreSQL en Railway y configurar `DATABASE_URL`.
+- Deployar backend en Railway y verificar `/ready`.
+- Deployar frontend en Vercel con `VITE_API_BASE_URL` apuntando al backend Railway.
+- Configurar `CORS_ORIGINS` y `FRONTEND_URL` con el dominio final de Vercel y redeployar backend si Railway no reinicia automaticamente.
 - No ejecutar `scripts/reset_local_db.py` ni `scripts/dev_seed.py` en produccion.
 - No versionar `.env`, `.env.local`, secretos, API Keys ni webhook secrets.
 
