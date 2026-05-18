@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
     EMAILS_ENABLED: bool = False
+    RUN_DEMO_SEED: bool = False
+    ALLOW_DEMO_SEED: bool = False
     FRONTEND_URL: str = "http://127.0.0.1:5173"
     BACKEND_URL: str = "http://127.0.0.1:8000"
     LOG_LEVEL: str = "INFO"

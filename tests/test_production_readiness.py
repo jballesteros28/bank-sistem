@@ -22,6 +22,18 @@ def test_settings_parse_cors_origins_csv() -> None:
     ]
 
 
+def test_settings_parse_demo_seed_flags() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+        RUN_DEMO_SEED="true",
+        ALLOW_DEMO_SEED="false",
+    )
+
+    assert settings.RUN_DEMO_SEED is True
+    assert settings.ALLOW_DEMO_SEED is False
+
+
 def test_settings_production_rejects_weak_secret_key() -> None:
     with pytest.raises(ValidationError, match="SECRET_KEY"):
         Settings(
@@ -92,12 +104,34 @@ def test_ready_endpoint_reports_database_available(client) -> None:
 
 def test_dev_scripts_abort_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dev_seed.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(dev_seed.settings, "ALLOW_DEMO_SEED", False)
     monkeypatch.setattr(reset_local_db.settings, "ENVIRONMENT", "production")
 
     with pytest.raises(SystemExit, match="production"):
         dev_seed._ensure_dev_database_safety()
     with pytest.raises(SystemExit, match="production"):
         reset_local_db._ensure_dev_database_safety()
+
+
+def test_dev_seed_allows_production_only_with_demo_seed_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev_seed.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(dev_seed.settings, "ALLOW_DEMO_SEED", True)
+    monkeypatch.setattr(
+        dev_seed.settings,
+        "DATABASE_URL",
+        "postgresql+psycopg2://wallet:secret@demo-db.example.com:5432/render_demo",
+    )
+
+    dev_seed._ensure_dev_database_safety()
+
+
+def test_dev_seed_validates_database_url_even_with_demo_seed_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dev_seed.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(dev_seed.settings, "ALLOW_DEMO_SEED", True)
+    monkeypatch.setattr(dev_seed.settings, "DATABASE_URL", "sqlite+pysqlite:///wallet_saas_demo.db")
+
+    with pytest.raises(SystemExit, match="seguridad"):
+        dev_seed._ensure_dev_database_safety()
 
 
 def test_dev_scripts_accept_docker_compose_database_host(monkeypatch: pytest.MonkeyPatch) -> None:

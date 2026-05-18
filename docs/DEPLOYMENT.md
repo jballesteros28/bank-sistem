@@ -19,6 +19,8 @@ DATABASE_URL=postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DB_NAME
 SECRET_KEY=generar-un-valor-largo-y-aleatorio-de-32-caracteres-o-mas
 CORS_ORIGINS=https://wallet-demo.vercel.app
 EMAILS_ENABLED=false
+RUN_DEMO_SEED=false
+ALLOW_DEMO_SEED=false
 FRONTEND_URL=https://wallet-demo.vercel.app
 BACKEND_URL=https://wallet-saas-backend.up.railway.app
 LOG_LEVEL=INFO
@@ -40,6 +42,8 @@ sh scripts/docker_start.sh
 
 Railway usa `Dockerfile.backend` y `railway.json`. El comando de arranque corre `python -m alembic upgrade head` y despues levanta Uvicorn en `PORT` con fallback local a `8000`.
 
+En Render con Docker se usa el mismo `Dockerfile.backend` y el mismo comando de arranque `sh scripts/docker_start.sh`. Configurar las variables de entorno desde el panel del servicio y usar el `PORT` que Render inyecta automaticamente.
+
 Pasos Railway:
 
 1. Crear un proyecto en Railway.
@@ -58,6 +62,31 @@ curl https://wallet-saas-backend.up.railway.app/ready
 ```
 
 `/health` valida que la app responde. `/ready` ejecuta un `SELECT 1` contra la DB y devuelve `503` si no esta disponible.
+
+## Seed demo automatico en Render
+
+Para demos en Render donde no hay shell comodo, el backend puede cargar datos demo durante el startup. No corre por defecto.
+
+Variables para demo:
+
+```env
+RUN_DEMO_SEED=true
+ALLOW_DEMO_SEED=true
+```
+
+Flujo de startup:
+
+1. `scripts/docker_start.sh` ejecuta `python -m alembic upgrade head`.
+2. Si `RUN_DEMO_SEED=true`, ejecuta `python scripts/dev_seed.py`.
+3. Si `RUN_DEMO_SEED` no es `true`, salta el seed.
+4. Luego levanta Uvicorn en `PORT`.
+
+Advertencias:
+
+- Usar solo en entorno demo. No activar en produccion real.
+- `ALLOW_DEMO_SEED=true` es obligatorio si `ENVIRONMENT=production`; sin ese flag el seed aborta.
+- El seed es idempotente: reiniciar el servicio no duplica organizacion, usuarios demo, wallets, movimientos base, API Key, webhook ni recompensas demo.
+- `DATABASE_URL` se sigue validando antes de abrir sesion contra la base configurada.
 
 ## Frontend Vercel
 
@@ -148,7 +177,7 @@ Para produccion real:
 
 ## Scripts Locales
 
-`scripts/dev_seed.py` y `scripts/reset_local_db.py` son solo para desarrollo. Ambos abortan con `ENVIRONMENT=production` y tambien frenan si `DATABASE_URL` no parece local. No usarlos contra una DB productiva.
+`scripts/reset_local_db.py` es solo para desarrollo y aborta con `ENVIRONMENT=production`. `scripts/dev_seed.py` tambien queda bloqueado en produccion real, salvo demos explicitas con `RUN_DEMO_SEED=true` y `ALLOW_DEMO_SEED=true`; aun asi valida `DATABASE_URL` antes de abrir sesion. No usar estos scripts contra una DB productiva real.
 
 ## Seguridad Frontend
 

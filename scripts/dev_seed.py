@@ -1,7 +1,7 @@
-"""Seed local idempotente para dejar Wallet SaaS listo para pruebas manuales.
+"""Seed demo idempotente para dejar Wallet SaaS listo para pruebas manuales.
 
-No es una herramienta de produccion: `main()` valida ENVIRONMENT y DATABASE_URL
-antes de abrir una sesion contra la base configurada.
+No corre en produccion real por defecto: `main()` valida ENVIRONMENT,
+ALLOW_DEMO_SEED y DATABASE_URL antes de abrir una sesion contra la base configurada.
 """
 
 from __future__ import annotations
@@ -114,6 +114,9 @@ def _masked_database_url() -> str:
 
 
 def _database_safety_issues() -> list[str]:
+    allow_hosted_demo_database = (
+        settings.ENVIRONMENT.strip().lower() == "production" and settings.ALLOW_DEMO_SEED
+    )
     issues: list[str] = []
     try:
         url = make_url(settings.DATABASE_URL)
@@ -122,6 +125,17 @@ def _database_safety_issues() -> list[str]:
 
     database_name = (url.database or "").lower()
     host = (url.host or "").lower()
+    backend = url.get_backend_name()
+
+    if allow_hosted_demo_database:
+        if backend != "postgresql":
+            issues.append("DATABASE_URL debe usar PostgreSQL para seed demo en production.")
+        if not database_name:
+            issues.append("DATABASE_URL debe incluir nombre de base para seed demo en production.")
+        if not host:
+            issues.append("DATABASE_URL debe incluir host para seed demo en production.")
+        return issues
+
     if "wallet_saas" not in database_name:
         issues.append("El nombre de base en DATABASE_URL debe contener 'wallet_saas'.")
     if host not in {"localhost", "127.0.0.1", "postgres"}:
@@ -131,7 +145,12 @@ def _database_safety_issues() -> list[str]:
 
 def _ensure_dev_database_safety(*, allow_unsafe_database: bool = False) -> None:
     if settings.ENVIRONMENT.strip().lower() == "production":
-        raise SystemExit("Abortado: dev_seed.py no puede correr con ENVIRONMENT=production.")
+        if not settings.ALLOW_DEMO_SEED:
+            raise SystemExit(
+                "Abortado: dev_seed.py no corre con ENVIRONMENT=production salvo que "
+                "ALLOW_DEMO_SEED=true. Usar solo en entornos demo, nunca en produccion real."
+            )
+        print("ALLOW_DEMO_SEED=true detectado con ENVIRONMENT=production. Ejecutando seed demo controlado.")
 
     issues = _database_safety_issues()
     if not issues:
@@ -143,6 +162,8 @@ def _ensure_dev_database_safety(*, allow_unsafe_database: bool = False) -> None:
     print(f"DATABASE_URL={_masked_database_url()}")
     for issue in issues:
         print(f"- {issue}")
+    if settings.ENVIRONMENT.strip().lower() == "production":
+        raise SystemExit("Abortado por seguridad: DATABASE_URL no es valido para seed demo en production.")
     if not allow_unsafe_database:
         raise SystemExit(
             "Abortado por seguridad. Si realmente es una base local de desarrollo, "
@@ -662,7 +683,7 @@ def main() -> None:
     parser.add_argument(
         "--allow-unsafe-database",
         action="store_true",
-        help="Permite correr si DATABASE_URL no parece wallet_saas local. Nunca saltea ENVIRONMENT=production.",
+        help="Permite correr en desarrollo si DATABASE_URL no parece wallet_saas local. No saltea validaciones de production.",
     )
     args = parser.parse_args()
 

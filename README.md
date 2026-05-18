@@ -215,6 +215,14 @@ Backend Railway:
 - Health checks disponibles: `GET /health` y `GET /ready`; Railway usa `/ready` para validar DB.
 - `EMAILS_ENABLED=true` solo cuando SMTP este configurado.
 
+Seed demo automatico en Render:
+
+- Para un entorno demo sin shell manual, configurar `RUN_DEMO_SEED=true` y `ALLOW_DEMO_SEED=true`.
+- Usar solo en entornos demo. No activar en produccion real.
+- El seed corre despues de Alembic y antes de Uvicorn desde `scripts/docker_start.sh`.
+- El seed es idempotente: si el servicio se reinicia, actualiza los datos demo conocidos sin duplicar organizacion, usuarios, wallets, movimientos base, API Key, webhook ni recompensas demo.
+- Si `ENVIRONMENT=production` y `RUN_DEMO_SEED=true` pero `ALLOW_DEMO_SEED=false`, el startup aborta con un mensaje claro y no carga datos demo.
+
 Frontend Vercel:
 
 - Variables Vite: `VITE_API_BASE_URL=https://<backend-railway>.up.railway.app`, `VITE_API_PREFIX=/api/v1` y `VITE_APP_NAME=Wallet SaaS`.
@@ -229,7 +237,8 @@ Checklist:
 - Deployar backend en Railway y verificar `/ready`.
 - Deployar frontend en Vercel con `VITE_API_BASE_URL` apuntando al backend Railway.
 - Configurar `CORS_ORIGINS` y `FRONTEND_URL` con el dominio final de Vercel y redeployar backend si Railway no reinicia automaticamente.
-- No ejecutar `scripts/reset_local_db.py` ni `scripts/dev_seed.py` en produccion.
+- No ejecutar `scripts/reset_local_db.py` en produccion.
+- No ejecutar `scripts/dev_seed.py` en produccion real; solo se permite para demos con `RUN_DEMO_SEED=true` y `ALLOW_DEMO_SEED=true`.
 - No versionar `.env`, `.env.local`, secretos, API Keys ni webhook secrets.
 
 Validacion frontend completada en FASE 14.1.1:
